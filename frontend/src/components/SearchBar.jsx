@@ -22,11 +22,7 @@ export default function SearchBar({ onSearch }) {
 
   return (
     <form onSubmit={handleSubmit} className="w-full">
-      <div className={`
-        relative
-        ${isFocused ? 'scale-[1.02]' : 'scale-100'}
-        ${ANIMATIONS.transitionFast}
-      `}>
+      <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
         <input
           type="text"

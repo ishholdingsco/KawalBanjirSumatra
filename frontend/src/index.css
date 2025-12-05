@@ -1,5 +1,4 @@
-/* Mapbox CSS - Must be imported first */
-@import 'mapbox-gl/dist/mapbox-gl.css';
+/* Mapbox CSS removed from here - now imported in Map.jsx for lazy loading */
 
 @tailwind base;
 @tailwind components;
@@ -81,6 +80,28 @@
   padding: 8px;
 }
 
+/* Hide Reset Bearing to North button */
+.mapboxgl-ctrl-compass {
+  display: none !important;
+}
+
+/* Custom Info Button to match mapbox controls */
+.mapboxgl-ctrl-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 29px;
+  height: 29px;
+  background-color: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mapboxgl-ctrl-icon:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
 /* Smooth Scrollbar for Sidebar */
 .overflow-y-auto {
   scrollbar-width: thin;
@@ -110,4 +131,18 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Shimmer animation for skeleton loading */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
 }

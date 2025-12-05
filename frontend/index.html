@@ -1,13 +1,54 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+
+    <!-- Primary Meta Tags -->
+    <title>Kawal Banjir Sumatra</title>
+    <meta name="title" content="Kawal Banjir Sumatra - Sistem Pemantauan & Pelaporan Bencana Banjir Real-time" />
+    <meta name="description" content="Platform interaktif untuk memantau, melaporkan, dan mendapatkan informasi terkini tentang bencana banjir di wilayah Sumatra. Akses peta real-time, laporan terkini, dan data tingkat keparahan banjir untuk meningkatkan kesiapsiagaan dan respons bencana." />
+    <meta name="keywords" content="banjir sumatra, pemantauan banjir, pelaporan bencana, peta banjir real-time, mitigasi banjir, tanggap darurat, sistem peringatan dini, bencana alam sumatra" />
+    <meta name="author" content="Kawal Banjir Sumatra" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ishholdingsco.github.io/KawalBanjirSumatra/" />
+    <meta property="og:title" content="Kawal Banjir Sumatra - Sistem Pemantauan & Pelaporan Bencana Banjir Real-time" />
+    <meta property="og:description" content="Platform interaktif untuk memantau, melaporkan, dan mendapatkan informasi terkini tentang bencana banjir di wilayah Sumatra. Akses peta real-time dan data tingkat keparahan banjir." />
+    <meta property="og:image" content="https://ishholdingsco.github.io/KawalBanjirSumatra/og-image.png" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://ishholdingsco.github.io/KawalBanjirSumatra/" />
+    <meta property="twitter:title" content="Kawal Banjir Sumatra - Sistem Pemantauan & Pelaporan Bencana Banjir Real-time" />
+    <meta property="twitter:description" content="Platform interaktif untuk memantau, melaporkan, dan mendapatkan informasi terkini tentang bencana banjir di wilayah Sumatra." />
+    <meta property="twitter:image" content="https://ishholdingsco.github.io/KawalBanjirSumatra/og-image.png" />
+
+    <!-- Preconnect to external resources -->
+    <link rel="preconnect" href="https://api.mapbox.com" />
+    <link rel="preconnect" href="https://events.mapbox.com" />
+    <link rel="dns-prefetch" href="https://api.mapbox.com" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Register Service Worker for better caching -->
+    <script>
+      if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(() => {
+              // Service worker registered successfully
+            })
+            .catch(() => {
+              // Failed to register, app will work without it
+            });
+        });
+      }
+    </script>
   </body>
 </html>

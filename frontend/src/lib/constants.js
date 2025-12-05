@@ -44,8 +44,8 @@ export const Z_INDEX = {
   dropdown: 10,
   overlay: 20,
   modal: 30,
-  sidebar: 30,
   header: 40,
+  sidebar: 45,
   fab: 50,
   toast: 100,
 }

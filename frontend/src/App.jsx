@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
-import { Plus } from 'lucide-react';
-import Map from './components/Map';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { Plus, Info } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import StatisticsPanel from './components/StatisticsPanel';
 import { Button } from './components/ui/button';
 import { Z_INDEX, ANIMATIONS } from './lib/constants';
-import axios from 'axios';
+import { apiService } from './services/api';
+
+// Lazy load Map component to reduce initial bundle size
+const Map = lazy(() => import('./components/Map'));
 
 // API Configuration
 // Default to localhost for development
@@ -23,14 +26,19 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
 
-  // Fetch reports from API (disabled for now - backend not running)
+  // Statistics state
+  const [statistics, setStatistics] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState(null);
+  const [selectedRegion, setSelectedRegion] = useState(null);
+  const [showStatistics, setShowStatistics] = useState(true);
+
+  // Fetch data on mount
   useEffect(() => {
-    // Uncomment line below when backend is ready
-    // fetchReports();
-
-    // For now, just set loading to false to show the map
-    setLoading(false);
+    fetchReports();
+    fetchStatistics(null); // Fetch Sumatra statistics on initial load
   }, []);
 
   const fetchReports = async () => {
@@ -44,19 +52,69 @@ function App() {
         return;
       }
 
-      const response = await axios.get(`${API_URL}/reports`);
-      setReports(response.data);
-      setFilteredReports(response.data);
+      const data = await apiService.getReports();
+      setReports(data);
+      setFilteredReports(data);
       setError(null);
     } catch (err) {
       console.error('Error fetching reports:', err);
       const errorMessage = isProduction && !apiConfigured
         ? 'Backend API belum dikonfigurasi. Deploy backend terlebih dahulu atau set VITE_API_URL.'
-        : 'Gagal memuat data. Pastikan backend server berjalan di ' + API_URL;
+        : 'Gagal memuat data laporan.';
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchStatistics = async (regionData) => {
+    try {
+      setStatsLoading(true);
+      setStatsError(null);
+
+      let data;
+      let regionName = '';
+
+      // If no region data, fetch Sumatra-wide statistics
+      if (!regionData) {
+        data = await apiService.getSumatraStatistics();
+        regionName = 'Data Banjir Sumatra';
+      } else {
+        // Fetch statistics based on admin level
+        if (regionData.adminLevel === 'provinsi') {
+          if (regionData.kodeProvinsi) {
+            data = await apiService.getStatisticsByProvinsi(regionData.kodeProvinsi);
+            regionName = regionData.namaProvinsi;
+          }
+        } else if (regionData.adminLevel === 'kabupaten' || regionData.adminLevel === 'kecamatan') {
+          // For kabupaten and kecamatan, get provinsi data for now
+          // TODO: Add API endpoints for kabupaten/kecamatan level statistics
+          if (regionData.kodeProvinsi) {
+            data = await apiService.getStatisticsByProvinsi(regionData.kodeProvinsi);
+            regionName = regionData.namaKabupaten || regionData.namaKecamatan;
+          }
+        }
+      }
+
+      if (data) {
+        setStatistics({ ...data, regionName });
+      }
+    } catch (err) {
+      console.error('Error fetching statistics:', err);
+      setStatsError(regionData ? 'Gagal memuat statistik untuk wilayah ini.' : 'Gagal memuat statistik.');
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const handleRegionClick = (regionData) => {
+    setSelectedRegion(regionData);
+    setShowStatistics(true);
+    fetchStatistics(regionData);
+  };
+
+  const handleCloseStatistics = () => {
+    setShowStatistics(false);
   };
 
   const handleSearch = (query) => {
@@ -93,29 +151,77 @@ function App() {
       {/* Header */}
       <Header
         onSearch={handleSearch}
-        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-        sidebarOpen={sidebarOpen}
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Map Section */}
         <div className="flex-1 relative">
-          {/* Always show the map */}
-          <Map
-            reports={filteredReports}
-            onMarkerClick={handleMarkerClick}
-          />
+          {/* Map with skeleton loading */}
+          <Suspense fallback={
+            <div className="absolute inset-0 bg-gray-100 overflow-hidden">
+              {/* Skeleton for map controls (top right) */}
+              <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
+                <div className="w-8 h-8 bg-gray-300 rounded shadow-md animate-pulse"></div>
+                <div className="w-8 h-8 bg-gray-300 rounded shadow-md animate-pulse"></div>
+                <div className="w-8 h-8 bg-gray-300 rounded shadow-md animate-pulse"></div>
+              </div>
 
-          {/* Loading Overlay */}
-          {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-50/90 to-gray-100/90 backdrop-blur-sm" style={{ zIndex: Z_INDEX.overlay }}>
-              <div className="text-center bg-white p-8 rounded-2xl shadow-xl">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-t-4 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-700 font-medium text-lg">Memuat data bencana...</p>
-                <p className="text-gray-500 text-sm mt-2">Mohon tunggu sebentar</p>
+              {/* Map skeleton with shimmer effect */}
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300">
+                {/* Shimmer animation overlay */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
+
+                {/* Fake map grid pattern */}
+                <div className="absolute inset-0 opacity-10">
+                  <div className="grid grid-cols-4 grid-rows-4 h-full w-full">
+                    {[...Array(16)].map((_, i) => (
+                      <div key={i} className="border border-gray-400"></div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Random marker skeletons for realism */}
+                <div className="absolute top-1/4 left-1/3 w-6 h-6 bg-blue-300 rounded-full animate-pulse shadow-md"></div>
+                <div className="absolute top-1/2 left-1/2 w-6 h-6 bg-red-300 rounded-full animate-pulse shadow-md"></div>
+                <div className="absolute top-2/3 left-2/3 w-6 h-6 bg-yellow-300 rounded-full animate-pulse shadow-md"></div>
               </div>
             </div>
+          }>
+            <Map
+              reports={filteredReports}
+              onMarkerClick={handleMarkerClick}
+              onMapLoaded={() => setMapLoaded(true)}
+              onRegionClick={handleRegionClick}
+            />
+          </Suspense>
+
+          {/* Statistics Panel - show by default, can be closed */}
+          {showStatistics && (
+            <div className="absolute top-4 left-4 max-w-md" style={{ zIndex: Z_INDEX.overlay }}>
+              <StatisticsPanel
+                statistics={statistics}
+                loading={statsLoading}
+                error={statsError}
+                onRefresh={() => fetchStatistics(selectedRegion)}
+                onClose={handleCloseStatistics}
+              />
+            </div>
+          )}
+
+          {/* Floating Sidebar Toggle Button - styled like mapbox controls */}
+          {/* Only show after map is loaded */}
+          {mapLoaded && (
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="mapboxgl-ctrl mapboxgl-ctrl-group mapboxgl-ctrl-icon absolute top-[115px] right-[10px]"
+              style={{ zIndex: Z_INDEX.overlay }}
+              title={sidebarOpen ? "Tutup Info" : "Buka Info"}
+              aria-label={sidebarOpen ? "Tutup Info" : "Buka Info"}
+            >
+              <Info className="h-5 w-5 text-gray-700 mx-auto" />
+            </button>
           )}
 
           {/* Error Notification Banner */}
@@ -151,14 +257,14 @@ function App() {
           </Button>
         </div>
 
-        {/* Sidebar Section */}
+        {/* Sidebar Section - Always overlay (absolute) on all devices */}
         <div
           className={`
-            fixed md:relative inset-y-0 right-0
+            absolute inset-y-0 right-0
             w-full sm:w-80 md:w-96
             transform ${ANIMATIONS.transition}
-            ${sidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
-            border-l shadow-2xl md:shadow-lg
+            ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+            border-l shadow-2xl
           `}
           style={{ zIndex: Z_INDEX.sidebar }}
         >
@@ -166,6 +272,7 @@ function App() {
             reports={filteredReports}
             selectedReport={selectedReport}
             onReportClick={handleReportClick}
+            onClose={() => setSidebarOpen(false)}
           />
         </div>
       </div>
@@ -185,17 +292,7 @@ function App() {
         <Plus className="h-7 w-7" />
       </Button>
 
-      {/* Overlay for mobile sidebar */}
-      {sidebarOpen && (
-        <div
-          className={`
-            md:hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm
-            ${ANIMATIONS.transitionFast}
-          `}
-          style={{ zIndex: Z_INDEX.overlay }}
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {/* No overlay backdrop - let users see the map while sidebar is open */}
     </div>
   );
 }

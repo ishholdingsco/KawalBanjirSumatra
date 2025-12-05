@@ -8,13 +8,47 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
+        pure_funcs: ['console.log', 'console.info', 'console.debug']
+      }
+    },
     rollupOptions: {
       output: {
-        manualChunks: {
-          'mapbox-gl': ['mapbox-gl'],
-          'vendor': ['react', 'react-dom', 'axios']
-        }
+        manualChunks: (id) => {
+          // Mapbox GL in its own chunk for lazy loading
+          if (id.includes('mapbox-gl')) {
+            return 'mapbox-gl';
+          }
+          // React core
+          if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
+            return 'react-vendor';
+          }
+          // Axios
+          if (id.includes('axios')) {
+            return 'axios';
+          }
+          // Icons
+          if (id.includes('lucide-react') || id.includes('react-icons')) {
+            return 'icons';
+          }
+          // Other node_modules
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
       }
-    }
+    },
+    chunkSizeWarningLimit: 600,
+    cssCodeSplit: true
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'axios']
   }
 })

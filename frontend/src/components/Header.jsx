@@ -1,16 +1,14 @@
-import { Menu, X } from 'lucide-react';
-import { Button } from './ui/button';
 import SearchBar from './SearchBar';
 import { Z_INDEX } from '../lib/constants';
 
-export default function Header({ onSearch, onMenuClick, sidebarOpen }) {
+export default function Header({ onSearch }) {
   return (
     <header
       className="bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg flex-shrink-0 backdrop-blur-sm"
       style={{ zIndex: Z_INDEX.header }}
     >
       <div className="px-4 py-3 md:py-4">
-        <div className="flex items-center justify-between mb-3 md:mb-4">
+        <div className="mb-3 md:mb-4">
           <div className="flex-1 min-w-0">
             <h1 className="text-xl md:text-2xl font-bold truncate flex items-center gap-2">
               <span className="text-2xl">🌊</span>
@@ -20,13 +18,6 @@ export default function Header({ onSearch, onMenuClick, sidebarOpen }) {
               Sistem Monitoring Banjir Real-time
             </p>
           </div>
-          <Button
-            onClick={onMenuClick}
-            className="md:hidden p-2 h-auto bg-blue-700 hover:bg-blue-800 border border-blue-500"
-            size="icon"
-          >
-            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
         </div>
         <SearchBar onSearch={onSearch} />
       </div>

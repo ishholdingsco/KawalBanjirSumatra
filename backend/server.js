@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const { startBNPBSyncScheduler } = require('./scheduler/bnpbSync');
 
 dotenv.config();
 
@@ -13,15 +14,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/kawal-banjir', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-  .then(() => console.log('✅ MongoDB Connected'))
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/kawal-banjir')
+  .then(() => {
+    console.log('✅ MongoDB Connected');
+
+    // Start BNPB auto-sync scheduler
+    startBNPBSyncScheduler();
+  })
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 
 // Routes
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/regions', require('./routes/regions'));
+app.use('/api/flood-data', require('./routes/floodData'));
+app.use('/api/statistics', require('./routes/statistics'));
+app.use('/api/boundaries', require('./routes/boundaries'));
 
 // Health check
 app.get('/api/health', (req, res) => {

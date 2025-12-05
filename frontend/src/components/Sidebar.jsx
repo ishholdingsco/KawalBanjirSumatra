@@ -1,8 +1,9 @@
-import { AlertTriangle, TrendingUp } from 'lucide-react';
+import { AlertTriangle, TrendingUp, X } from 'lucide-react';
 import ReportCard from './ReportCard';
 import { Z_INDEX } from '../lib/constants';
+import { Button } from './ui/button';
 
-export default function Sidebar({ reports, selectedReport, onReportClick }) {
+export default function Sidebar({ reports, selectedReport, onReportClick, onClose }) {
   return (
     <div className="h-full flex flex-col bg-white" style={{ zIndex: Z_INDEX.sidebar }}>
       {/* Header */}
@@ -12,6 +13,15 @@ export default function Sidebar({ reports, selectedReport, onReportClick }) {
             <TrendingUp className="h-5 w-5 text-blue-600" />
             Timeline Bencana
           </h2>
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full hover:bg-gray-200"
+            title="Tutup"
+          >
+            <X className="h-5 w-5 text-gray-600" />
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
