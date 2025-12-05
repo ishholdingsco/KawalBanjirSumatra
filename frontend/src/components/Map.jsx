@@ -6,6 +6,8 @@ import { SEVERITY_CONFIG, CATEGORY_CONFIG } from '../lib/constants';
 
 // Get Mapbox token from environment variable
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+// Get API URL from environment variable
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -762,7 +764,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
         // Wait for fade out animation
         await new Promise(resolve => setTimeout(resolve, 300));
 
-        const response = await fetch(`http://localhost:5000/api/boundaries?zoom=${currentZoom}`);
+        const response = await fetch(`${API_URL}/boundaries?zoom=${currentZoom}`);
         const result = await response.json();
 
         if (result.success && result.data) {
