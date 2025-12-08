@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { Plus, Info, AlertTriangle } from 'lucide-react';
+import { Plus, Info } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import StatisticsPanel from './components/StatisticsPanel';
@@ -9,15 +9,6 @@ import { dataService } from './services/dataService';
 
 // Lazy load Map component to reduce initial bundle size
 const Map = lazy(() => import('./components/Map'));
-
-// API Configuration
-// Default to localhost for development
-// In production, set VITE_API_URL in GitHub Secrets or use your deployed backend URL
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-// Check if we're in production and API is not configured
-const isProduction = import.meta.env.MODE === 'production';
-const apiConfigured = import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL !== '';
 
 function App() {
   const [reports, setReports] = useState([]);
@@ -44,24 +35,13 @@ function App() {
   const fetchReports = async () => {
     try {
       setLoading(true);
-
-      // If in production and API not configured, show message
-      if (isProduction && !apiConfigured) {
-        setError('Backend API belum dikonfigurasi. Silakan setup VITE_API_URL di environment variables.');
-        setLoading(false);
-        return;
-      }
-
       const data = await dataService.getReports();
       setReports(data);
       setFilteredReports(data);
       setError(null);
     } catch (err) {
       console.error('Error fetching reports:', err);
-      const errorMessage = isProduction && !apiConfigured
-        ? 'Backend API belum dikonfigurasi. Deploy backend terlebih dahulu atau set VITE_API_URL.'
-        : 'Gagal memuat data laporan.';
-      setError(errorMessage);
+      setError('Gagal memuat data laporan. Periksa koneksi Airtable Anda.');
     } finally {
       setLoading(false);
     }
@@ -142,7 +122,7 @@ function App() {
 
   const handleAddReport = () => {
     // TODO: Open form modal or redirect to form page
-    alert('Fitur tambah laporan akan segera hadir!\n\nAnda dapat menambahkan data melalui API endpoint:\nPOST ' + API_URL + '/reports');
+    alert('Fitur tambah laporan akan segera hadir!\n\nAnda dapat menambahkan data langsung melalui Airtable.');
   };
 
   return (
@@ -223,20 +203,6 @@ function App() {
             </button>
           )}
 
-          {/* Error Notification Banner */}
-          {error && (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 max-w-md w-full mx-4" style={{ zIndex: Z_INDEX.overlay }}>
-              <div className="bg-white rounded-xl shadow-xl border-2 border-blue-200 p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <h3 className="font-bold text-gray-900 text-sm mb-1">Koneksi Bermasalah</h3>
-                    <p className="text-xs text-gray-600">{error}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Add Report Button (Desktop) */}
           <Button
