@@ -51,9 +51,9 @@ export default function Sidebar({ reports, selectedReport, onReportClick, onClos
           <div className="divide-y divide-gray-100">
             {reports.map((report) => (
               <ReportCard
-                key={report._id}
+                key={report._id || report.id}
                 report={report}
-                isSelected={selectedReport?._id === report._id}
+                isSelected={selectedReport?._id === report._id || selectedReport?.id === report.id}
                 onClick={() => onReportClick(report)}
               />
             ))}

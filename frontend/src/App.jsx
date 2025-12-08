@@ -73,31 +73,30 @@ function App() {
       setStatsError(null);
 
       let data;
-      let regionName = '';
 
       // If no region data, fetch Sumatra-wide statistics
       if (!regionData) {
         data = await dataService.getSumatraStatistics();
-        regionName = 'Data Banjir Sumatra';
       } else {
         // Fetch statistics based on admin level
         if (regionData.adminLevel === 'provinsi') {
-          if (regionData.kodeProvinsi) {
-            data = await dataService.getStatisticsByProvinsi(regionData.kodeProvinsi);
-            regionName = regionData.namaProvinsi;
-          }
-        } else if (regionData.adminLevel === 'kabupaten' || regionData.adminLevel === 'kecamatan') {
-          // For kabupaten and kecamatan, get provinsi data for now
-          // TODO: Add API endpoints for kabupaten/kecamatan level statistics
-          if (regionData.kodeProvinsi) {
-            data = await dataService.getStatisticsByProvinsi(regionData.kodeProvinsi);
-            regionName = regionData.namaKabupaten || regionData.namaKecamatan;
-          }
+          // For province: sum all kabupaten in that province
+          data = await dataService.getStatisticsByProvinsi(
+            regionData.kodeProvinsi,
+            regionData.namaProvinsi
+          );
+        } else if (regionData.adminLevel === 'kabupaten') {
+          // For kabupaten: get specific kabupaten data
+          data = await dataService.getStatisticsByKabupaten(regionData.namaKabupaten);
+        } else if (regionData.adminLevel === 'kecamatan') {
+          // For kecamatan: get kabupaten data (kecamatan level not stored)
+          data = await dataService.getStatisticsByKabupaten(regionData.namaKabupaten);
         }
       }
 
       if (data) {
-        setStatistics({ ...data, regionName });
+        // regionName is already included in data from service functions
+        setStatistics(data);
       }
     } catch (err) {
       console.error('Error fetching statistics:', err);

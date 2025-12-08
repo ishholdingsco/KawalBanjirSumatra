@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { startBNPBSyncScheduler } = require('./scheduler/bnpbSync');
+const { startAirtableBNPBSyncScheduler } = require('./scheduler/airtableBnpbSync');
 
 dotenv.config();
 
@@ -18,8 +19,12 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/kawal-ban
   .then(() => {
     console.log('✅ MongoDB Connected');
 
-    // Start BNPB auto-sync scheduler
+    // Start BNPB auto-sync schedulers
+    // MongoDB sync (daily at 6 AM)
     startBNPBSyncScheduler();
+
+    // Airtable sync (every 6 hours)
+    startAirtableBNPBSyncScheduler();
   })
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 

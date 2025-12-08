@@ -3,11 +3,10 @@ import mapboxgl from 'mapbox-gl';
 // IMPORTANT: CSS must be imported in the component when using lazy loading
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { SEVERITY_CONFIG, CATEGORY_CONFIG } from '../lib/constants';
+import { dataService } from '../services/dataService';
 
 // Get Mapbox token from environment variable
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-// Get API URL from environment variable
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -16,7 +15,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
   const map = useRef(null);
   const markers = useRef([]);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [currentZoom, setCurrentZoom] = useState(6);
+  const [currentZoom, setCurrentZoom] = useState(5);
   const isLoadingBoundaries = useRef(false);
 
   // Initialize map
@@ -36,8 +35,8 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: [99.0, 2.0], // Center fokus ke Aceh-Sumut-Sumbar
-      zoom: 6.5,
+      center: [100.0, 0.5], // Center ke tengah Pulau Sumatra
+      zoom: 5, // Zoom level 5 untuk melihat seluruh Sumatra
       // ❌ Tidak pakai maxBounds karena mengganggu scroll zoom
       // Sebagai gantinya, kita akan handle pembatasan panning secara manual
       maxZoom: 18,
@@ -601,12 +600,21 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           html += `<p class="text-xs text-gray-600">Tingkat: Kecamatan</p>`;
         }
 
-        // Add population data if available
-        if (properties.jumlah_penduduk) {
-          html += `<p class="text-xs text-gray-700 mt-2">Populasi: ${properties.jumlah_penduduk.toLocaleString()}</p>`;
+        // Add population data if available (with fallbacks for different field names)
+        const population = properties.jumlah_penduduk || properties.Population || properties['Population '];
+        if (population) {
+          const populationNum = typeof population === 'string' ? parseFloat(population) : population;
+          if (!isNaN(populationNum)) {
+            html += `<p class="text-xs text-gray-700 mt-2">Populasi: ${populationNum.toLocaleString('id-ID')} jiwa</p>`;
+          }
         }
-        if (properties.jumlah_kk) {
-          html += `<p class="text-xs text-gray-700">KK: ${properties.jumlah_kk.toLocaleString()}</p>`;
+
+        const households = properties.jumlah_kk || properties.households;
+        if (households) {
+          const householdsNum = typeof households === 'string' ? parseFloat(households) : households;
+          if (!isNaN(householdsNum)) {
+            html += `<p class="text-xs text-gray-700">KK: ${householdsNum.toLocaleString('id-ID')}</p>`;
+          }
         }
 
         html += '</div>';
@@ -779,21 +787,22 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
         // Wait for fade out animation
         await new Promise(resolve => setTimeout(resolve, 300));
 
-        const response = await fetch(`${API_URL}/boundaries?zoom=${currentZoom}`);
-        const result = await response.json();
+        // Use dataService to get boundaries (supports both Airtable and Backend)
+        const boundariesData = await dataService.getBoundaries(currentZoom);
 
-        if (result.success && result.data) {
+        // Handle both backend format { success, data } and direct GeoJSON
+        const geojsonData = boundariesData.success ? boundariesData.data : boundariesData;
+
+        if (geojsonData) {
           const source = map.current.getSource('boundaries');
           const labelSource = map.current.getSource('region-labels');
 
           if (source) {
-            source.setData(result.data);
+            source.setData(geojsonData);
 
             // 🏷️ Deduplicate labels - satu label per region
             if (labelSource) {
-              const deduplicatedLabels = deduplicateLabels(result.data);
-              console.log('📍 Deduplicated labels:', deduplicatedLabels.features.length, 'labels from', result.data.features.length, 'features');
-              console.log('📍 Label features:', deduplicatedLabels.features);
+              const deduplicatedLabels = deduplicateLabels(geojsonData);
               labelSource.setData(deduplicatedLabels);
             }
 
@@ -840,6 +849,14 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
 
     // Add new markers
     reports.forEach(report => {
+      // Validate report has location and coordinates
+      if (!report.location || !report.location.coordinates ||
+          !Array.isArray(report.location.coordinates) ||
+          report.location.coordinates.length < 2) {
+        console.warn('Skipping report without valid coordinates:', report);
+        return;
+      }
+
       const el = document.createElement('div');
       el.className = 'marker';
 
@@ -899,15 +916,44 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
     // Fit map to markers if there are any, but stay within Sumatra bounds
     if (reports.length > 0) {
       const bounds = new mapboxgl.LngLatBounds();
+      const sumatraBounds = {
+        west: 94.5,
+        east: 106.5,
+        south: -6.0,
+        north: 6.5
+      };
+
+      let validReportsCount = 0;
       reports.forEach(report => {
-        bounds.extend(report.location.coordinates);
+        // Only extend bounds if report has valid coordinates
+        if (report.location && report.location.coordinates &&
+            Array.isArray(report.location.coordinates) &&
+            report.location.coordinates.length >= 2) {
+          const [lng, lat] = report.location.coordinates;
+
+          // ✅ Validate coordinates are within Sumatra bounds
+          if (lng >= sumatraBounds.west && lng <= sumatraBounds.east &&
+              lat >= sumatraBounds.south && lat <= sumatraBounds.north) {
+            bounds.extend(report.location.coordinates);
+            validReportsCount++;
+          } else {
+            console.warn('⚠️ Skipping report outside Sumatra bounds:', {
+              locationName: report.locationName,
+              coordinates: report.location.coordinates
+            });
+          }
+        }
       });
-      // Fit with constraints: padding, max zoom, dan pastikan tidak keluar dari Sumatra
-      map.current.fitBounds(bounds, {
-        padding: { top: 80, bottom: 80, left: 80, right: 80 },
-        maxZoom: 10, // Jangan zoom terlalu dekat
-        duration: 1000 // Smooth animation
-      });
+
+      // Only fitBounds if we have at least one valid report
+      if (validReportsCount > 0) {
+        // Fit with constraints: padding, max zoom, dan pastikan tidak keluar dari Sumatra
+        map.current.fitBounds(bounds, {
+          padding: { top: 80, bottom: 80, left: 80, right: 80 },
+          maxZoom: 10, // Jangan zoom terlalu dekat
+          duration: 1000 // Smooth animation
+        });
+      }
     }
   }, [reports, mapLoaded, onMarkerClick]);
 
