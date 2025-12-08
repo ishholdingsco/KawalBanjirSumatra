@@ -147,6 +147,21 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
         }
       }
 
+      // Helper function to safely add layer with beforeId
+      const safeAddLayer = (layerConfig, beforeId) => {
+        try {
+          // Check if beforeId layer exists
+          if (beforeId && map.current.getLayer(beforeId)) {
+            map.current.addLayer(layerConfig, beforeId);
+          } else {
+            // Add without beforeId if it doesn't exist
+            map.current.addLayer(layerConfig);
+          }
+        } catch (error) {
+          console.warn(`Could not add layer ${layerConfig.id}:`, error.message);
+        }
+      };
+
       // 🌍 Load world countries (exclude Indonesia) - simplified for performance
       fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson')
         .then(response => {
@@ -173,7 +188,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           });
 
           // Add gray fill layer for world countries
-          map.current.addLayer({
+          safeAddLayer({
             id: 'world-countries-gray-fill',
             type: 'fill',
             source: 'world-countries-gray',
@@ -184,7 +199,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           }, firstSymbolId);
 
           // Add outline for world countries
-          map.current.addLayer({
+          safeAddLayer({
             id: 'world-countries-gray-outline',
             type: 'line',
             source: 'world-countries-gray',
@@ -248,7 +263,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           // 3. all-provinces-gray-fill (gray for Indonesian provinces except Aceh/Sumut/Sumbar)
           //    ↑ Covers roads in Indonesia
           // 4. boundaries-fill (colored Aceh/Sumut/Sumbar provinces - top layer)
-          map.current.addLayer({
+          safeAddLayer({
             id: 'all-provinces-gray-fill',
             type: 'fill',
             source: 'all-provinces-gray',
@@ -259,7 +274,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           }, beforeLayer); // Insert BEFORE colored provinces layer
 
           // Add outline untuk provinsi Indonesia lainnya
-          map.current.addLayer({
+          safeAddLayer({
             id: 'all-provinces-gray-outline',
             type: 'line',
             source: 'all-provinces-gray',
@@ -305,7 +320,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
 
               const beforeLayer = map.current.getLayer('boundaries-fill') ? 'boundaries-fill' : firstSymbolId;
 
-              map.current.addLayer({
+              safeAddLayer({
                 id: 'all-provinces-gray-fill',
                 type: 'fill',
                 source: 'all-provinces-gray',
@@ -315,7 +330,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
                 }
               }, beforeLayer);
 
-              map.current.addLayer({
+              safeAddLayer({
                 id: 'all-provinces-gray-outline',
                 type: 'line',
                 source: 'all-provinces-gray',
@@ -360,7 +375,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
 
               const beforeLayer = map.current.getLayer('boundaries-fill') ? 'boundaries-fill' : firstSymbolId;
 
-              map.current.addLayer({
+              safeAddLayer({
                 id: 'all-provinces-gray-fill',
                 type: 'fill',
                 source: 'all-provinces-gray',
@@ -370,7 +385,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
                 }
               }, beforeLayer);
 
-              map.current.addLayer({
+              safeAddLayer({
                 id: 'all-provinces-gray-outline',
                 type: 'line',
                 source: 'all-provinces-gray',

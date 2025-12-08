@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: process.env.VITE_BASE_PATH || '/',
+  assetsInclude: ['**/*.lottie'],
   build: {
     outDir: 'dist',
     sourcemap: false,

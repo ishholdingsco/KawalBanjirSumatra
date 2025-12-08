@@ -1,11 +1,11 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { Plus, Info } from 'lucide-react';
+import { Plus, Info, AlertTriangle } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import StatisticsPanel from './components/StatisticsPanel';
 import { Button } from './components/ui/button';
 import { Z_INDEX, ANIMATIONS } from './lib/constants';
-import { apiService } from './services/api';
+import { dataService } from './services/dataService';
 
 // Lazy load Map component to reduce initial bundle size
 const Map = lazy(() => import('./components/Map'));
@@ -52,7 +52,7 @@ function App() {
         return;
       }
 
-      const data = await apiService.getReports();
+      const data = await dataService.getReports();
       setReports(data);
       setFilteredReports(data);
       setError(null);
@@ -77,20 +77,20 @@ function App() {
 
       // If no region data, fetch Sumatra-wide statistics
       if (!regionData) {
-        data = await apiService.getSumatraStatistics();
+        data = await dataService.getSumatraStatistics();
         regionName = 'Data Banjir Sumatra';
       } else {
         // Fetch statistics based on admin level
         if (regionData.adminLevel === 'provinsi') {
           if (regionData.kodeProvinsi) {
-            data = await apiService.getStatisticsByProvinsi(regionData.kodeProvinsi);
+            data = await dataService.getStatisticsByProvinsi(regionData.kodeProvinsi);
             regionName = regionData.namaProvinsi;
           }
         } else if (regionData.adminLevel === 'kabupaten' || regionData.adminLevel === 'kecamatan') {
           // For kabupaten and kecamatan, get provinsi data for now
           // TODO: Add API endpoints for kabupaten/kecamatan level statistics
           if (regionData.kodeProvinsi) {
-            data = await apiService.getStatisticsByProvinsi(regionData.kodeProvinsi);
+            data = await dataService.getStatisticsByProvinsi(regionData.kodeProvinsi);
             regionName = regionData.namaKabupaten || regionData.namaKecamatan;
           }
         }
@@ -227,15 +227,12 @@ function App() {
           {/* Error Notification Banner */}
           {error && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 max-w-md w-full mx-4" style={{ zIndex: Z_INDEX.overlay }}>
-              <div className="bg-white rounded-xl shadow-xl border-2 border-orange-200 p-4">
+              <div className="bg-white rounded-xl shadow-xl border-2 border-blue-200 p-4">
                 <div className="flex items-start gap-3">
-                  <div className="text-2xl">⚠️</div>
+                  <AlertTriangle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <h3 className="font-bold text-gray-900 text-sm mb-1">Backend Belum Terhubung</h3>
-                    <p className="text-xs text-gray-600 mb-3">{error}</p>
-                    <Button onClick={fetchReports} size="sm" className="text-xs h-8">
-                      🔄 Coba Lagi
-                    </Button>
+                    <h3 className="font-bold text-gray-900 text-sm mb-1">Koneksi Bermasalah</h3>
+                    <p className="text-xs text-gray-600">{error}</p>
                   </div>
                 </div>
               </div>
@@ -247,10 +244,11 @@ function App() {
             onClick={handleAddReport}
             className={`
               hidden md:flex absolute bottom-6 left-6 items-center gap-2 px-5 py-3
-              bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-full
-              shadow-xl hover:shadow-2xl hover:scale-105
+              text-gray-800 rounded-full
+              shadow-[0_8px_30px_rgb(0,0,0,0.3)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.4)] hover:scale-105
               ${ANIMATIONS.transition}
             `}
+            style={{ background: '#bfddf8' }}
           >
             <Plus className="h-5 w-5" />
             <span className="font-semibold">Tambah Laporan</span>
@@ -282,11 +280,11 @@ function App() {
         onClick={handleAddReport}
         className={`
           md:hidden fixed bottom-6 right-6 w-16 h-16
-          bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-full
-          shadow-2xl hover:shadow-3xl hover:scale-110 active:scale-95
+          text-gray-800 rounded-full
+          shadow-[0_8px_30px_rgb(0,0,0,0.3)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.4)] hover:scale-110 active:scale-95
           ${ANIMATIONS.transition}
         `}
-        style={{ zIndex: Z_INDEX.fab }}
+        style={{ zIndex: Z_INDEX.fab, background: '#bfddf8' }}
         size="icon"
       >
         <Plus className="h-7 w-7" />

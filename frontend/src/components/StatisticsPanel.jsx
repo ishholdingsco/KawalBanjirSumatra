@@ -1,4 +1,4 @@
-import { School, Hospital, Church, Home, AlertTriangle, Users, MapPin, Construction, X } from 'lucide-react';
+import { School, Hospital, Church, Home, Users, MapPin, Construction, X, AlertTriangle } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 
@@ -20,20 +20,12 @@ export default function StatisticsPanel({ statistics, loading, error, onRefresh,
 
   if (error) {
     return (
-      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-xl p-4 max-w-md border-2 border-orange-200">
+      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-xl p-4 max-w-md border-2 border-blue-200">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-orange-500 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <h3 className="font-bold text-gray-900 text-sm mb-1">Gagal Memuat Data</h3>
-            <p className="text-xs text-gray-600 mb-3">{error}</p>
-            {onRefresh && (
-              <button
-                onClick={onRefresh}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-              >
-                🔄 Coba Lagi
-              </button>
-            )}
+            <h3 className="font-bold text-gray-900 text-sm mb-1">Data Belum Tersedia</h3>
+            <p className="text-xs text-gray-600">{error}</p>
           </div>
         </div>
       </div>
