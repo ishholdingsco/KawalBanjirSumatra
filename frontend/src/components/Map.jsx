@@ -1,16 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import mapboxgl from 'mapbox-gl';
 // IMPORTANT: CSS must be imported in the component when using lazy loading
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { SEVERITY_CONFIG, CATEGORY_CONFIG } from '../lib/constants';
-import { dataService } from '../services/dataService';
+import { filterBoundariesByZoom } from '../hooks/useCachedData';
 
 // Get Mapbox token from environment variable
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick }) {
+const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, cachedBoundaries }, ref) => {
   const mapContainer = useRef(null);
   const map = useRef(null);
   const markers = useRef([]);
@@ -408,29 +408,30 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
       });
 
       // Add fill layer for boundaries
-      // Color based on province, opacity based on admin level
+      // 🔥 NEW: Color based on Kerusakan value (damage level), opacity based on admin level
       map.current.addLayer({
         id: 'boundaries-fill',
         type: 'fill',
         source: 'boundaries',
         paint: {
           'fill-color': [
-            'match',
-            ['get', 'namaProvinsi'],
-            'ACEH', '#3B82F6',                    // 🔵 Biru untuk Aceh
-            'SUMATERA UTARA', '#EF4444',         // 🔴 Merah untuk Sumut
-            'SUMATRA UTARA', '#EF4444',          // 🔴 Merah untuk Sumut (alternative spelling)
-            'SUMATERA BARAT', '#EAB308',         // 🟡 Kuning untuk Sumbar
-            'SUMATRA BARAT', '#EAB308',          // 🟡 Kuning untuk Sumbar (alternative spelling)
-            '#94A3B8'  // Default abu-abu untuk provinsi lain
+            'step',
+            ['get', 'kerusakan'],  // NO DEFAULT - will error if null (that's good for debugging!)
+            '#3B82F6',      // 0: Biru (no damage)
+            0.1, '#FDE047', // < 100: Kuning terang (minimal damage)
+            100, '#FBBF24', // 100-500: Kuning (light damage)
+            500, '#F97316', // 500-1000: Orange (moderate damage)
+            1000, '#EA580C',// 1000-5000: Orange tua (significant damage)
+            5000, '#DC2626',// 5000-10000: Merah (severe damage)
+            10000, '#7F1D1D'// >= 10000: Merah gelap (catastrophic damage)
           ],
           'fill-opacity': [
             'match',
             ['get', 'adminLevel'],
-            'provinsi', 0.4,      // Lebih tebal untuk provinsi
-            'kabupaten', 0.3,     // Medium untuk kabupaten
+            'provinsi', 0.5,      // Lebih tebal untuk provinsi (increased for better visibility)
+            'kabupaten', 0.4,     // Medium untuk kabupaten (increased)
             'kecamatan', 0.2,     // Lebih tipis untuk kecamatan
-            0.2
+            0.3
           ],
           // Smooth transition for opacity changes
           'fill-opacity-transition': {
@@ -441,21 +442,22 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
       });
 
       // Add outline layer for boundaries
-      // Border color based on province (darker shade), width based on admin level
+      // 🔥 NEW: Border color based on Kerusakan (darker shade of fill), width based on admin level
       map.current.addLayer({
         id: 'boundaries-outline',
         type: 'line',
         source: 'boundaries',
         paint: {
           'line-color': [
-            'match',
-            ['get', 'namaProvinsi'],
-            'ACEH', '#1D4ED8',                    // 🔵 Biru gelap untuk Aceh
-            'SUMATERA UTARA', '#DC2626',         // 🔴 Merah gelap untuk Sumut
-            'SUMATRA UTARA', '#DC2626',          // 🔴 Merah gelap untuk Sumut (alternative spelling)
-            'SUMATERA BARAT', '#CA8A04',         // 🟡 Kuning gelap untuk Sumbar
-            'SUMATRA BARAT', '#CA8A04',          // 🟡 Kuning gelap untuk Sumbar (alternative spelling)
-            '#64748B'  // Default abu-abu gelap untuk provinsi lain
+            'step',
+            ['get', 'kerusakan'],  // NO DEFAULT
+            '#1D4ED8',      // 0: Biru gelap (no damage)
+            0.1, '#CA8A04', // < 100: Kuning gelap (minimal damage)
+            100, '#D97706', // 100-500: Kuning tua gelap (light damage)
+            500, '#C2410C', // 500-1000: Orange gelap (moderate damage)
+            1000, '#C2410C',// 1000-5000: Orange tua gelap (significant damage)
+            5000, '#991B1B',// 5000-10000: Merah gelap (severe damage)
+            10000, '#450A0A'// >= 10000: Merah sangat gelap (catastrophic damage)
           ],
           'line-width': [
             'match',
@@ -463,9 +465,9 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
             'provinsi', 3,       // Lebih tebal untuk provinsi
             'kabupaten', 2,      // Medium untuk kabupaten
             'kecamatan', 1.5,    // Tipis untuk kecamatan
-            1
+            1.5
           ],
-          'line-opacity': 0.8,
+          'line-opacity': 0.9,  // Increased for better visibility
           // Smooth transition for line properties
           'line-opacity-transition': {
             duration: 500,
@@ -536,20 +538,22 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           'symbol-avoid-edges': true
         },
         paint: {
+          // 🔥 NEW: Text color based on Kerusakan (very dark shades for readability)
           'text-color': [
-            'match',
-            ['coalesce', ['get', 'namaProvinsi'], ['get', 'nama_provinsi'], ''],
-            'ACEH', '#1E3A8A',           // Biru gelap untuk Aceh
-            'SUMATERA UTARA', '#991B1B', // Merah gelap untuk Sumut
-            'SUMATRA UTARA', '#991B1B',
-            'SUMATERA BARAT', '#92400E', // Coklat gelap untuk Sumbar
-            'SUMATRA BARAT', '#92400E',
-            '#1F2937' // Default hitam untuk lainnya
+            'step',
+            ['get', 'kerusakan'],  // NO DEFAULT
+            '#1E40AF',      // 0: Biru gelap (no damage)
+            0.1, '#854D0E', // < 100: Kuning gelap (minimal damage)
+            100, '#92400E', // 100-500: Coklat gelap (light damage)
+            500, '#9A3412', // 500-1000: Orange gelap (moderate damage)
+            1000, '#991B1B',// 1000-5000: Merah gelap (significant damage)
+            5000, '#7F1D1D',// 5000-10000: Merah sangat gelap (severe damage)
+            10000, '#450A0A'// >= 10000: Merah hitam (catastrophic damage)
           ],
           'text-halo-color': '#FFFFFF',
           'text-halo-width': 2,
           'text-halo-blur': 1,
-          'text-opacity': 1  // Temporary: set to 1 for debugging
+          'text-opacity': 1  // Full opacity for visibility
         }
       });
 
@@ -761,8 +765,9 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
   };
 
   // Load boundaries dynamically based on zoom level with smooth transition
+  // NOW USING CACHED DATA - no Airtable fetch!
   useEffect(() => {
-    if (!mapLoaded || !map.current) return;
+    if (!mapLoaded || !map.current || !cachedBoundaries) return;
 
     // Prevent concurrent loading
     if (isLoadingBoundaries.current) return;
@@ -785,22 +790,19 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
         // Wait for fade out animation
         await new Promise(resolve => setTimeout(resolve, 300));
 
-        // Use dataService to get boundaries (supports both Airtable and Backend)
-        const boundariesData = await dataService.getBoundaries(currentZoom);
+        // Filter boundaries by zoom (CLIENT-SIDE from cache)
+        const filteredBoundaries = filterBoundariesByZoom(cachedBoundaries, currentZoom);
 
-        // Handle both backend format { success, data } and direct GeoJSON
-        const geojsonData = boundariesData.success ? boundariesData.data : boundariesData;
-
-        if (geojsonData) {
+        if (filteredBoundaries) {
           const source = map.current.getSource('boundaries');
           const labelSource = map.current.getSource('region-labels');
 
           if (source) {
-            source.setData(geojsonData);
+            source.setData(filteredBoundaries);
 
             // 🏷️ Deduplicate labels - satu label per region
             if (labelSource) {
-              const deduplicatedLabels = deduplicateLabels(geojsonData);
+              const deduplicatedLabels = deduplicateLabels(filteredBoundaries);
               labelSource.setData(deduplicatedLabels);
             }
 
@@ -818,6 +820,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           }
         }
       } catch (error) {
+        console.error('Error loading boundaries from cache:', error);
         // Restore opacity on error
         map.current.setPaintProperty('boundaries-fill', 'fill-opacity', [
           'match',
@@ -834,7 +837,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
     };
 
     loadBoundaries();
-  }, [currentZoom, mapLoaded]);
+  }, [currentZoom, mapLoaded, cachedBoundaries]);
 
   // Update markers when reports change
   useEffect(() => {
@@ -948,6 +951,20 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
     }
   }, [reports, mapLoaded, onMarkerClick]);
 
+  // Expose flyToRegion method to parent via ref
+  useImperativeHandle(ref, () => ({
+    flyToRegion: (center, zoom = 9) => {
+      if (map.current) {
+        map.current.flyTo({
+          center,
+          zoom,
+          duration: 2000,
+          essential: true
+        });
+      }
+    }
+  }));
+
   return (
     <div className="w-full h-full relative">
       <div
@@ -977,4 +994,8 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
       )}
     </div>
   );
-}
+});
+
+Map.displayName = 'Map';
+
+export default Map;

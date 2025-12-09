@@ -52,10 +52,10 @@ export const airtableService = {
   // ===== LOCATIONS =====
   getLocations: async (filters = {}) => {
     try {
-      // Filter out Kecamatan type to improve performance
-      // Only fetch Province, Kabupaten, and Kota levels
+      // Fetch all location types including Kecamatan for comprehensive search
+      // Kecamatan data is needed for search functionality (to map to parent boundaries)
       const params = {
-        filterByFormula: "OR({Type} = 'Province', {Type} = 'Kabupaten', {Type} = 'Kota')"
+        filterByFormula: "OR({Type} = 'Province', {Type} = 'Kabupaten', {Type} = 'Kota', {Type} = 'Kecamatan')"
       };
 
       const records = await getAllRecords(TABLES.LOCATIONS, params);
@@ -598,6 +598,75 @@ export const airtableService = {
       };
       const records = await getAllRecords(TABLES.BOUNDARIES, params);
 
+      // 🔥 NEW: Fetch Kerusakan data from Locations table
+      // Fetch only Province and Kabupaten/Kota (exclude Kecamatan)
+      let locationsRecords = [];
+      try {
+        const locationsParams = {
+          filterByFormula: "OR({Type} = 'Province', {Type} = 'Kabupaten', {Type} = 'Kota')"
+        };
+        locationsRecords = await getAllRecords(TABLES.LOCATIONS, locationsParams);
+
+        console.log('🔍 DEBUG: ✅ Locations records fetched successfully:', locationsRecords.length);
+        console.log('🔍 DEBUG: First 3 locations:', locationsRecords.slice(0, 3).map(r => ({
+          id: r.id,
+          fields: r.fields
+        })));
+
+        // Log available field names from first record
+        if (locationsRecords.length > 0) {
+          console.log('🔍 DEBUG: Available field names in Locations:', Object.keys(locationsRecords[0].fields));
+        }
+      } catch (error) {
+        console.error('🔍 DEBUG: ❌❌❌ ERROR fetching Locations ❌❌❌');
+        console.error('🔍 DEBUG: Error object:', error);
+        console.error('🔍 DEBUG: Error message:', error.message);
+        console.error('🔍 DEBUG: Error stack:', error.stack);
+        alert('ERROR: Gagal fetch Locations! Check console untuk detail.');
+      }
+
+      // Log after try-catch to see what we got
+      console.log('🔍 DEBUG: After fetch attempt, locationsRecords.length =', locationsRecords.length);
+
+      // Create lookup map: namaWilayah -> kerusakanValue
+      // Use normalized names for matching (lowercase, trim spaces)
+      const kerusakanMap = {};
+      console.log('🔍 DEBUG: Creating Kerusakan map from', locationsRecords.length, 'records...');
+
+      locationsRecords.forEach((record, index) => {
+        const fields = record.fields;
+
+        // Try multiple possible field names for location name
+        const name = fields.Name || fields.name || fields.Nama || fields.nama ||
+                     fields['Location Name'] || fields.locationName || '';
+
+        // Try multiple possible field names for kerusakan
+        const kerusakan = fields.Kerusakan || fields.kerusakan ||
+                          fields.Damage || fields.damage ||
+                          fields['Total Damage'] || fields.totalDamage || 0;
+
+        if (index < 3) {
+          console.log(`🔍 DEBUG: Record ${index + 1} fields:`, fields);
+          console.log(`🔍 DEBUG: Record ${index + 1} - Name found: "${name}", Kerusakan found: ${kerusakan}`);
+        }
+
+        if (name) {
+          // Normalize name for matching (lowercase, trim)
+          const normalizedName = name.toLowerCase().trim();
+          const kerusakanValue = parseFloat(kerusakan) || 0;
+          kerusakanMap[normalizedName] = kerusakanValue;
+
+          if (index < 5) {
+            console.log(`🔍 DEBUG: Added to map - "${name}" (normalized: "${normalizedName}") -> Kerusakan: ${kerusakanValue}`);
+          }
+        } else {
+          console.warn(`🔍 DEBUG: ⚠️ Record ${index + 1} has no name field!`);
+        }
+      });
+
+      console.log('🔍 DEBUG: Kerusakan map created with', Object.keys(kerusakanMap).length, 'entries');
+      console.log('🔍 DEBUG: First 5 entries:', Object.entries(kerusakanMap).slice(0, 5));
+
       // Convert Airtable records to GeoJSON FeatureCollection
       const features = records.map(record => {
         const fields = record.fields;
@@ -672,14 +741,37 @@ export const airtableService = {
           adminLevel = 'provinsi';
         }
 
+        // Get nama wilayah based on admin level for Kerusakan lookup
+        const namaProvinsi = fields['Nama Provinsi'] || fields.namaProvinsi || fields.nama_provinsi || fields.ProvinceName || '';
+        const namaKabupaten = fields['Nama Kabupaten '] || fields['Nama Kabupaten'] || fields.namaKabupaten || fields.nama_kabupaten || fields.KabupatenName || '';
+        const namaKecamatan = fields['Nama Kecamatan '] || fields['Nama Kecamatan'] || fields.namaKecamatan || fields.nama_kecamatan || fields.KecamatanName || '';
+
+        // 🔥 NEW: Lookup Kerusakan value based on admin level
+        // Match by name (kabupaten takes priority over provinsi)
+        let kerusakan = 0;
+        if (adminLevel === 'kabupaten' && namaKabupaten) {
+          // Try to match kabupaten name first
+          const normalizedKabupaten = namaKabupaten.toLowerCase().trim();
+          kerusakan = kerusakanMap[normalizedKabupaten] || 0;
+
+          console.log(`🔍 DEBUG: Matching kabupaten "${namaKabupaten}" (normalized: "${normalizedKabupaten}") -> Kerusakan: ${kerusakan}`);
+        } else if (adminLevel === 'provinsi' && namaProvinsi) {
+          // Match provinsi name
+          const normalizedProvinsi = namaProvinsi.toLowerCase().trim();
+          kerusakan = kerusakanMap[normalizedProvinsi] || 0;
+
+          console.log(`🔍 DEBUG: Matching provinsi "${namaProvinsi}" (normalized: "${normalizedProvinsi}") -> Kerusakan: ${kerusakan}`);
+        }
+
         const properties = {
           adminLevel: adminLevel,  // Hardcoded logic based on kode fields
-          namaProvinsi: fields['Nama Provinsi'] || fields.namaProvinsi || fields.nama_provinsi || fields.ProvinceName,
-          namaKabupaten: fields['Nama Kabupaten '] || fields['Nama Kabupaten'] || fields.namaKabupaten || fields.nama_kabupaten || fields.KabupatenName,
-          namaKecamatan: fields['Nama Kecamatan '] || fields['Nama Kecamatan'] || fields.namaKecamatan || fields.nama_kecamatan || fields.KecamatanName,
+          namaProvinsi: namaProvinsi,
+          namaKabupaten: namaKabupaten,
+          namaKecamatan: namaKecamatan,
           kodeProvinsi: kodeProvinsi,
           kodeKabupaten: kodeKabupaten,
           kodeKecamatan: kodeKecamatan,
+          kerusakan: kerusakan,  // 🔥 NEW: Add Kerusakan value
           jumlah_penduduk: fields['Population '] || fields.Population || fields.jumlah_penduduk || fields.population,
           jumlah_kk: fields.jumlah_kk || fields.households,
           zoomMin: parseFloat(fields['Zoom Min']) || fields.zoomMin || fields.zoom_min || 0,
@@ -694,6 +786,15 @@ export const airtableService = {
           properties: properties
         };
       }).filter(feature => feature !== null); // Remove null features
+
+      // 🔍 DEBUG: Log summary of kerusakan values in features
+      const featuresWithKerusakan = features.filter(f => f.properties.kerusakan > 0);
+      console.log(`🔍 DEBUG: Total features: ${features.length}, Features with Kerusakan > 0: ${featuresWithKerusakan.length}`);
+      console.log('🔍 DEBUG: Sample features with Kerusakan:', featuresWithKerusakan.slice(0, 5).map(f => ({
+        adminLevel: f.properties.adminLevel,
+        nama: f.properties.namaProvinsi || f.properties.namaKabupaten,
+        kerusakan: f.properties.kerusakan
+      })));
 
       // Helper function: Check if coordinates are within Sumatra bounds
       const isWithinSumatraBounds = (geometry) => {

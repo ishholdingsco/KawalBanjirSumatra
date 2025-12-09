@@ -233,7 +233,7 @@ export default function Sidebar({
                       <p className="text-sm font-semibold text-gray-900">
                         {news?.length || 0} Berita
                       </p>
-                      <p className="text-xs text-gray-900">{(locationName || 'Sumatra').toUpperCase()}</p>
+                      <p className="text-xs text-gray-900">{locationName || 'Sumatra'}</p>
                     </>
                   )
                 )}
@@ -394,9 +394,7 @@ export default function Sidebar({
                 />
               </div>
               <p className="text-gray-900 font-medium mb-2">Belum ada berita</p>
-              <p className="text-sm text-gray-900">
-                Berita untuk {(locationName || 'Sumatra').toUpperCase()} akan muncul di sini
-              </p>
+              <p className="text-sm text-gray-900">Berita akan muncul di sini saat ada data</p>
             </div>
           ) : (
             /* Actual News Content - tampil kalau tidak loading dan ada data */

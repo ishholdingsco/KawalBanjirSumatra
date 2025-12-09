@@ -1,16 +1,32 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
-import { Plus, Info } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { Plus, Info, RefreshCw } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import StatisticsPanel from './components/StatisticsPanel';
 import { Button } from './components/ui/button';
 import { Z_INDEX, ANIMATIONS } from './lib/constants';
-import { dataService } from './services/dataService';
+import {
+  useCachedData,
+  filterNewsByLocation,
+  filterReportsByLocation,
+  calculateSumatraStatistics,
+  calculateStatisticsByProvinsi,
+  calculateStatisticsByKabupaten,
+  searchBoundaries,
+  searchWithLocations,
+  joinKerusakanToBoundaries  // 🔥 NEW: Import join function
+} from './hooks/useCachedData';
 
 // Lazy load Map component to reduce initial bundle size
 const Map = lazy(() => import('./components/Map'));
 
 function App() {
+  // Use cached data hook
+  const { isLoading: cacheLoading, error: cacheError, cacheReady, lastUpdated, loadFromCache, refreshData, clearCache } = useCachedData();
+
+  // Map ref for controlling map programmatically
+  const mapRef = useRef(null);
+
   const [reports, setReports] = useState([]);
   const [filteredReports, setFilteredReports] = useState([]);
   const [selectedReport, setSelectedReport] = useState(null);
@@ -22,95 +38,139 @@ function App() {
 
   // Statistics state
   const [statistics, setStatistics] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState(null);
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [showStatistics, setShowStatistics] = useState(true);
 
   // News state
   const [news, setNews] = useState([]);
-  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError] = useState(null);
   const [selectedNews, setSelectedNews] = useState(null);
   const [selectedLocationName, setSelectedLocationName] = useState('Sumatra');
 
-  // Fetch data on mount
-  useEffect(() => {
-    fetchReports(null); // Fetch all reports by default (no region filter)
-    fetchStatistics(null); // Fetch Sumatra statistics on initial load
-    fetchNews('Sumatra'); // Fetch Sumatra news by default (includes Indonesia + Sumatra)
-  }, []);
+  // Refresh state
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchReports = async (regionData = null) => {
+  // Fetch functions - using cached data (client-side filtering)
+  const fetchReports = useCallback((regionData = null) => {
     try {
       setLoading(true);
 
-      // Fetch reports filtered by region (or all if regionData is null)
-      const data = await dataService.getReportsByLocation(regionData);
+      // Load from cache
+      const cached = loadFromCache();
+      if (!cached || !cached.reports) {
+        setError('Cache belum siap. Silakan refresh halaman.');
+        setLoading(false);
+        return;
+      }
 
-      setReports(data);
-      setFilteredReports(data);
+      // Filter reports by region (client-side)
+      const filteredData = filterReportsByLocation(cached.reports, regionData);
+
+      setReports(filteredData);
+      setFilteredReports(filteredData);
       setError(null);
     } catch (err) {
-      setError('Gagal memuat data laporan. Periksa koneksi Airtable Anda.');
+      console.error('Error loading reports:', err);
+      setError('Gagal memuat data laporan.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadFromCache]);
 
-  const fetchStatistics = async (regionData) => {
+  const fetchStatistics = useCallback((regionData) => {
     try {
       setStatsLoading(true);
       setStatsError(null);
 
+      // Load from cache
+      const cached = loadFromCache();
+      if (!cached || !cached.locations) {
+        setStatsError('Cache belum siap. Silakan refresh halaman.');
+        setStatsLoading(false);
+        return;
+      }
+
       let data;
 
-      // If no region data, fetch Sumatra-wide statistics
+      // Calculate statistics (client-side)
       if (!regionData) {
-        data = await dataService.getSumatraStatistics();
+        // Sumatra-wide statistics
+        data = calculateSumatraStatistics(cached.locations);
       } else {
-        // Fetch statistics based on admin level
+        // Statistics based on admin level
         if (regionData.adminLevel === 'provinsi') {
-          // For province: sum all kabupaten in that province
-          data = await dataService.getStatisticsByProvinsi(
+          data = calculateStatisticsByProvinsi(
+            cached.locations,
             regionData.kodeProvinsi,
             regionData.namaProvinsi
           );
         } else if (regionData.adminLevel === 'kabupaten') {
-          // For kabupaten: get specific kabupaten data
-          data = await dataService.getStatisticsByKabupaten(regionData.namaKabupaten);
+          data = calculateStatisticsByKabupaten(cached.locations, regionData.namaKabupaten);
         } else if (regionData.adminLevel === 'kecamatan') {
           // For kecamatan: get kabupaten data (kecamatan level not stored)
-          data = await dataService.getStatisticsByKabupaten(regionData.namaKabupaten);
+          data = calculateStatisticsByKabupaten(cached.locations, regionData.namaKabupaten);
         }
       }
 
       if (data) {
-        // regionName is already included in data from service functions
         setStatistics(data);
       }
     } catch (err) {
+      console.error('Error calculating statistics:', err);
       setStatsError(regionData ? 'Gagal memuat statistik untuk wilayah ini.' : 'Gagal memuat statistik.');
     } finally {
       setStatsLoading(false);
     }
-  };
+  }, [loadFromCache]);
 
-  const fetchNews = async (locationName, locationCode = null) => {
+  const fetchNews = useCallback((locationName, locationCode = null) => {
     try {
       setNewsLoading(true);
       setNewsError(null);
 
-      // Fetch news filtered by location name and optionally by location code
-      // locationCode helps group kecamatan news under kabupaten
-      const data = await dataService.getNewsByLocation(locationName || 'Sumatra', locationCode);
-      setNews(data);
+      // Load from cache
+      const cached = loadFromCache();
+      if (!cached || !cached.news) {
+        setNewsError('Cache belum siap. Silakan refresh halaman.');
+        setNewsLoading(false);
+        return;
+      }
+
+      // Filter news by location (client-side)
+      const filteredNews = filterNewsByLocation(cached.news, locationName || 'Sumatra', locationCode);
+      setNews(filteredNews);
       setSelectedLocationName(locationName || 'Sumatra');
     } catch (err) {
+      console.error('Error loading news:', err);
       setNewsError('Gagal memuat berita untuk wilayah ini.');
     } finally {
       setNewsLoading(false);
     }
+  }, [loadFromCache]);
+
+  // Initialize data from cache when ready
+  useEffect(() => {
+    if (cacheReady) {
+      fetchReports(null); // Load all reports
+      fetchStatistics(null); // Load Sumatra statistics
+      fetchNews('Sumatra'); // Load Sumatra news
+    }
+  }, [cacheReady, fetchReports, fetchStatistics, fetchNews]);
+
+  // Handle refresh - clear cache then reload page (like first load)
+  const handleRefreshData = () => {
+    if (isRefreshing) return;
+
+    // Clear cache
+    clearCache();
+
+    // Reload halaman
+    // Karena cache sudah di-clear, maka loading screen akan sama seperti first load
+    // (tanpa text "Memuat data dari Airtable")
+    window.location.reload();
   };
 
   const handleRegionClick = (regionData) => {
@@ -152,19 +212,138 @@ function App() {
     setShowStatistics(false);
   };
 
+  // Translation mapping for bilingual search (Indonesia <-> English)
+  const getSearchKeywords = (query) => {
+    const searchMapping = {
+      // News Categories
+      'bantuan': ['bantuan', 'aid', 'relief'],
+      'aid': ['bantuan', 'aid', 'relief'],
+      'relief': ['bantuan', 'aid', 'relief'],
+      'resmi': ['resmi', 'official'],
+      'official': ['resmi', 'official'],
+      'akses': ['akses', 'access'],
+      'access': ['akses', 'access'],
+      'tingkat banjir': ['tingkat banjir', 'flood level', 'level'],
+      'flood level': ['tingkat banjir', 'flood level', 'level'],
+      'level': ['tingkat banjir', 'flood level', 'level'],
+
+      // Common words
+      'banjir': ['banjir', 'flood'],
+      'flood': ['banjir', 'flood'],
+      'jalan': ['jalan', 'road'],
+      'road': ['jalan', 'road'],
+      'tertutup': ['tertutup', 'closed'],
+      'closed': ['tertutup', 'closed'],
+      'evakuasi': ['evakuasi', 'evacuation'],
+      'evacuation': ['evakuasi', 'evacuation']
+    };
+
+    const lowercaseQuery = query.toLowerCase().trim();
+
+    // Check if query matches any mapping
+    if (searchMapping[lowercaseQuery]) {
+      return searchMapping[lowercaseQuery];
+    }
+
+    // If no mapping, return original query
+    return [lowercaseQuery];
+  };
+
   const handleSearch = (query) => {
+    // Reset to default if empty query
     if (!query.trim()) {
       setFilteredReports(reports);
+      // Reset to Sumatra view
+      setSelectedRegion(null);
+      setShowStatistics(true);
+      fetchStatistics(null);
+      fetchNews('Sumatra');
       return;
     }
 
-    const lowercaseQuery = query.toLowerCase();
-    const filtered = reports.filter(report =>
-      report.locationName.toLowerCase().includes(lowercaseQuery) ||
-      report.description.toLowerCase().includes(lowercaseQuery) ||
-      report.category.toLowerCase().includes(lowercaseQuery)
-    );
-    setFilteredReports(filtered);
+    // Check if cache is ready
+    if (!cacheReady) {
+      console.warn('Cache not ready for search');
+      return;
+    }
+
+    // Load cached data
+    const cached = loadFromCache();
+    if (!cached || !cached.boundaries || !cached.locations) {
+      console.warn('No cached data available for search');
+      return;
+    }
+
+    // SMART SEARCH: Try to find location in both boundaries AND locations (including Kecamatan)
+    const locationResult = searchWithLocations(cached.boundaries, cached.locations, query);
+
+    if (locationResult) {
+      // LOCATION FOUND: Fly to location and update statistics & sidebar
+      const { regionData, center, searchedLocation } = locationResult;
+
+      // 1. Fly map to location with zoom 11
+      if (mapRef.current && mapRef.current.flyToRegion) {
+        mapRef.current.flyToRegion(center, 11);
+      }
+
+      // 2. Trigger region click to update statistics & sidebar
+      // This will automatically update stats panel, reports, and news
+      handleRegionClick(regionData);
+
+    } else {
+      // LOCATION NOT FOUND: Search in reports and news instead
+
+      // Get bilingual search keywords
+      const searchKeywords = getSearchKeywords(query);
+
+      // Filter reports by query (with bilingual support)
+      const filteredReportsResult = reports.filter(report => {
+        const locationName = (report.locationName || '').toLowerCase();
+        const description = (report.description || '').toLowerCase();
+        const category = (report.category || '').toLowerCase();
+
+        // Check if ANY keyword matches
+        return searchKeywords.some(keyword =>
+          locationName.includes(keyword) ||
+          description.includes(keyword) ||
+          category.includes(keyword)
+        );
+      });
+      setFilteredReports(filteredReportsResult);
+
+      // Filter news by query (with bilingual support)
+      // Match against: ALL fields (headline, details, category, locationName, eventTime, sourceLink, etc)
+      const filteredNewsResult = (cached.news || []).filter(newsItem => {
+        const headline = (newsItem.headline || newsItem.Headline || '').toLowerCase();
+        const details = (newsItem.details || newsItem.Details || '').toLowerCase();
+        const category = (newsItem.category || newsItem.Category || '').toLowerCase();
+        const locationName = (newsItem.locationName || '').toLowerCase();
+        const eventTime = (newsItem.eventTime || newsItem['Event Time'] || '').toLowerCase();
+        const sourceLink = (newsItem.sourceLink || newsItem['Source Link'] || '').toLowerCase();
+        const locationCode = (newsItem.locationCode || '').toLowerCase();
+
+        // Check if ANY keyword matches in ANY field
+        return searchKeywords.some(keyword =>
+          headline.includes(keyword) ||
+          details.includes(keyword) ||
+          category.includes(keyword) ||
+          locationName.includes(keyword) ||
+          eventTime.includes(keyword) ||
+          sourceLink.includes(keyword) ||
+          locationCode.includes(keyword)
+        );
+      });
+      setNews(filteredNewsResult);
+
+      // Update location name to show this is search results
+      setSelectedLocationName(`Hasil Pencarian: "${query}"`);
+
+      // Reset region selection (no connection to boundaries)
+      setSelectedRegion(null);
+
+      // Open sidebar to show filtered results
+      setSidebarOpen(true);
+    }
   };
 
   const handleMarkerClick = (report) => {
@@ -197,9 +376,9 @@ function App() {
         {/* Map Section */}
         <div className="flex-1 relative">
           {/* Map with skeleton loading */}
-          <Suspense fallback={
+          {cacheLoading ? (
             <div
-              className="absolute inset-0 flex items-center justify-center"
+              className="absolute inset-0 flex flex-col items-center justify-center gap-4"
               style={{ background: '#bfddf8' }}
             >
               {/* Logo with blinking animation - Mobile */}
@@ -215,14 +394,61 @@ function App() {
                 className="h-24 w-auto hidden sm:block animate-pulse"
               />
             </div>
-          }>
-            <Map
-              reports={filteredReports}
-              onMarkerClick={handleMarkerClick}
-              onMapLoaded={() => setMapLoaded(true)}
-              onRegionClick={handleRegionClick}
-            />
-          </Suspense>
+          ) : cacheError ? (
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6"
+              style={{ background: '#bfddf8' }}
+            >
+              <img
+                src="/logo.png"
+                alt="Kawal Banjir Sumatra"
+                className="h-24 w-auto"
+              />
+              <div className="text-center max-w-md">
+                <p className="text-red-600 font-semibold mb-2">Gagal Memuat Data</p>
+                <p className="text-gray-700 text-sm mb-4">{cacheError}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-white text-gray-800 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+                >
+                  Muat Ulang Halaman
+                </button>
+              </div>
+            </div>
+          ) : (
+            <Suspense fallback={
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                style={{ background: '#bfddf8' }}
+              >
+                <img
+                  src="/logo-mobile.png"
+                  alt="Kawal Banjir Sumatra"
+                  className="h-20 w-auto sm:hidden animate-pulse"
+                />
+                <img
+                  src="/logo.png"
+                  alt="Kawal Banjir Sumatra"
+                  className="h-24 w-auto hidden sm:block animate-pulse"
+                />
+              </div>
+            }>
+              <Map
+                ref={mapRef}
+                reports={filteredReports}
+                onMarkerClick={handleMarkerClick}
+                onMapLoaded={() => setMapLoaded(true)}
+                onRegionClick={handleRegionClick}
+                cachedBoundaries={cacheReady ? (() => {
+                  const cached = loadFromCache();
+                  // 🔥 NEW: Join Kerusakan data from Locations into Boundaries
+                  return cached?.boundaries && cached?.locations
+                    ? joinKerusakanToBoundaries(cached.boundaries, cached.locations)
+                    : cached?.boundaries;
+                })() : null}
+              />
+            </Suspense>
+          )}
 
           {/* Statistics Panel - show by default, can be closed */}
           {/* Only show after map is loaded to prevent UI flash during skeleton loading */}
@@ -241,16 +467,31 @@ function App() {
           {/* Floating Sidebar Toggle Button - styled like mapbox controls */}
           {/* Only show after map is loaded */}
           {mapLoaded && (
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="mapboxgl-ctrl mapboxgl-ctrl-group mapboxgl-ctrl-icon absolute top-[115px] right-[10px]"
-              style={{ zIndex: Z_INDEX.overlay }}
-              title={sidebarOpen ? "Tutup Info" : "Buka Info"}
-              aria-label={sidebarOpen ? "Tutup Info" : "Buka Info"}
-            >
-              <Info className="h-5 w-5 text-gray-700 mx-auto" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="mapboxgl-ctrl mapboxgl-ctrl-group mapboxgl-ctrl-icon absolute top-[115px] right-[10px]"
+                style={{ zIndex: Z_INDEX.overlay }}
+                title={sidebarOpen ? "Tutup Info" : "Buka Info"}
+                aria-label={sidebarOpen ? "Tutup Info" : "Buka Info"}
+              >
+                <Info className="h-5 w-5 text-gray-700 mx-auto" />
+              </button>
+
+              {/* Refresh Data Button - below Info button */}
+              <button
+                type="button"
+                onClick={handleRefreshData}
+                disabled={isRefreshing}
+                className="mapboxgl-ctrl mapboxgl-ctrl-group mapboxgl-ctrl-icon absolute top-[155px] right-[10px]"
+                style={{ zIndex: Z_INDEX.overlay }}
+                title="Perbarui Data"
+                aria-label="Perbarui Data"
+              >
+                <RefreshCw className={`h-5 w-5 text-gray-700 mx-auto ${isRefreshing ? 'animate-spin' : ''}`} />
+              </button>
+            </>
           )}
 
 

@@ -53,6 +53,10 @@ export default function StatisticsPanel({ statistics, loading, error, onRefresh,
               </div>
               <div className="flex justify-between items-center">
                 <div className="h-3 md:h-4 bg-gray-200/60 rounded w-20"></div>
+                <div className="h-3 md:h-4 bg-gray-300/60 rounded w-14"></div>
+              </div>
+              <div className="flex justify-between items-center">
+                <div className="h-3 md:h-4 bg-gray-200/60 rounded w-20"></div>
                 <div className="h-3 md:h-4 bg-gray-300/60 rounded w-16"></div>
               </div>
               <div className="flex justify-between items-center pt-0.5 md:pt-1 border-t border-gray-300">
@@ -93,6 +97,7 @@ export default function StatisticsPanel({ statistics, loading, error, onRefresh,
   const totalLukaSakit = statistics.totalKorbanLukaSakit || 0;
   const totalMenderita = statistics.totalMenderita || 0;
   const totalMengungsi = statistics.totalPengungsi || 0;
+  const totalKerusakan = statistics.totalKerusakan || 0;
   const totalKorban = totalMeninggal + totalHilang + totalLukaSakit;
 
   return (
@@ -166,6 +171,10 @@ export default function StatisticsPanel({ statistics, loading, error, onRefresh,
             <div className="flex justify-between">
               <span className="text-gray-600">Luka/Sakit</span>
               <span className="font-bold text-orange-700">{totalLukaSakit.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-600">Kerusakan</span>
+              <span className="font-bold text-red-600">{totalKerusakan.toLocaleString()}</span>
             </div>
             {totalMenderita > 0 && (
               <div className="flex justify-between">
