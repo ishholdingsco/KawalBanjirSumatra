@@ -15,6 +15,7 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
   const map = useRef(null);
   const markers = useRef([]);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapReady, setMapReady] = useState(false); // Track when map is truly ready (after labels hidden)
   const [currentZoom, setCurrentZoom] = useState(5);
   const isLoadingBoundaries = useRef(false);
 
@@ -95,12 +96,6 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
       }
     });
 
-    // Notify parent immediately when map component is mounted
-    // This makes the "Buka Info" button appear together with zoom/GPS controls
-    if (onMapLoaded) {
-      onMapLoaded();
-    }
-
     map.current.on('load', () => {
       // 🎯 CUSTOMIZATION: Hide labels outside Sumatra dan gray out other countries
       const layers = map.current.getStyle().layers;
@@ -157,7 +152,6 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
             map.current.addLayer(layerConfig);
           }
         } catch (error) {
-          console.warn(`Could not add layer ${layerConfig.id}:`, error.message);
         }
       };
 
@@ -210,7 +204,6 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           }, firstSymbolId);
         })
         .catch(err => {
-          console.error('❌ Failed to load world countries:', err);
         });
 
       // 🇮🇩 Load ALL Indonesian provinces (simplified, lightweight)
@@ -285,7 +278,6 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           }, beforeLayer);
         })
         .catch(err => {
-          console.error('❌ Failed to load gray background:', err);
 
           // Fallback: Try alternative source
           fetch('https://raw.githubusercontent.com/ans-4175/peta-indonesia-geojson/master/indonesia-prov.geojson')
@@ -341,11 +333,9 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
               }, beforeLayer);
             })
             .catch(err2 => {
-              console.error('❌ All sources failed:', err2);
             });
         })
         .catch(err => {
-          console.error('❌ Failed to load gray background:', err);
 
           // Fallback: Try alternative source
           fetch('https://raw.githubusercontent.com/ans-4175/peta-indonesia-geojson/master/indonesia-prov.geojson')
@@ -396,7 +386,6 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
               }, beforeLayer);
             })
             .catch(err2 => {
-              console.error('❌ All sources failed:', err2);
             });
         });
 
@@ -655,10 +644,19 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
       // Initial load
       setMapLoaded(true);
       setCurrentZoom(Math.round(map.current.getZoom()));
+
+      // Notify parent AFTER map is fully loaded and all labels are hidden
+      // Add a small delay to ensure browser has applied all style changes
+      // This prevents the flash of default Mapbox labels (city points)
+      setTimeout(() => {
+        setMapReady(true); // Mark map as truly ready
+        if (onMapLoaded) {
+          onMapLoaded();
+        }
+      }, 300); // 300ms delay to ensure all label hiding is rendered
     });
 
     map.current.on('error', (e) => {
-      console.error('Map error:', e);
     });
 
     // Add navigation controls
@@ -820,7 +818,6 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
           }
         }
       } catch (error) {
-        console.error('❌ Failed to load boundaries:', error);
         // Restore opacity on error
         map.current.setPaintProperty('boundaries-fill', 'fill-opacity', [
           'match',
@@ -853,7 +850,6 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
       if (!report.location || !report.location.coordinates ||
           !Array.isArray(report.location.coordinates) ||
           report.location.coordinates.length < 2) {
-        console.warn('Skipping report without valid coordinates:', report);
         return;
       }
 
@@ -936,11 +932,6 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
               lat >= sumatraBounds.south && lat <= sumatraBounds.north) {
             bounds.extend(report.location.coordinates);
             validReportsCount++;
-          } else {
-            console.warn('⚠️ Skipping report outside Sumatra bounds:', {
-              locationName: report.locationName,
-              coordinates: report.location.coordinates
-            });
           }
         }
       });
@@ -958,12 +949,32 @@ export default function Map({ reports, onMarkerClick, onMapLoaded, onRegionClick
   }, [reports, mapLoaded, onMarkerClick]);
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
       <div
         ref={mapContainer}
         className="w-full h-full"
         style={{ minHeight: '400px' }}
       />
+      {/* Loading overlay to prevent flash of Mapbox default labels */}
+      {!mapReady && (
+        <div
+          className="absolute inset-0 flex items-center justify-center z-50"
+          style={{ background: '#bfddf8' }}
+        >
+          {/* Logo with blinking animation - Mobile */}
+          <img
+            src="/logo-mobile.png"
+            alt="Kawal Banjir Sumatra"
+            className="h-20 w-auto sm:hidden animate-pulse"
+          />
+          {/* Logo with blinking animation - Desktop/Tablet */}
+          <img
+            src="/logo.png"
+            alt="Kawal Banjir Sumatra"
+            className="h-24 w-auto hidden sm:block animate-pulse"
+          />
+        </div>
+      )}
     </div>
   );
 }

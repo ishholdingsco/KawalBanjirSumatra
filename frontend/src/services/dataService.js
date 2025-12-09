@@ -21,7 +21,8 @@ export const dataService = {
   // ===== REPORTS =====
   getReports: async () => {
     if (DATA_SOURCE === 'airtable') {
-      return airtableService.getReportsInbox();
+      const reports = await airtableService.getReportsInbox();
+      return reports;
     }
     return apiService.getReports();
   },
@@ -48,6 +49,14 @@ export const dataService = {
     }
     // Backend doesn't have this endpoint yet
     throw new Error('Backend does not support updateReport');
+  },
+
+  getReportsByLocation: async (regionData = null) => {
+    if (DATA_SOURCE === 'airtable') {
+      return airtableService.getReportsByLocation(regionData);
+    }
+    // If no region, return all reports
+    return dataService.getReports();
   },
 
   // ===== LOCATIONS / REGIONS =====
@@ -85,6 +94,23 @@ export const dataService = {
       return airtableService.getLocations();
     }
     return apiService.getRegions(params);
+  },
+
+  // ===== NEWS (from STATUS LOG) =====
+  getNews: async () => {
+    if (DATA_SOURCE === 'airtable') {
+      return airtableService.getNews();
+    }
+    // Backend doesn't have news endpoint
+    throw new Error('Backend does not support news');
+  },
+
+  getNewsByLocation: async (locationName, locationCode = null) => {
+    if (DATA_SOURCE === 'airtable') {
+      return airtableService.getNewsByLocation(locationName, locationCode);
+    }
+    // Backend doesn't have news endpoint
+    throw new Error('Backend does not support news by location');
   },
 
   // ===== FLOOD DATA / STATUS =====
@@ -197,7 +223,7 @@ export const dataService = {
       return {
         ...stats,
         regionName: namaProvinsi || 'Provinsi',
-        lastSync: stats.lastSync || new Date().toISOString()
+        lastSync: stats.lastSync
       };
     }
     return apiService.getStatisticsByProvinsi(kodeProvinsi);
@@ -236,7 +262,7 @@ export const dataService = {
         return {
           ...stats,
           regionName: kabupatenLocation['Loc Name'] || namaKabupaten,
-          lastSync: stats.lastSync || new Date().toISOString()
+          lastSync: stats.lastSync
         };
       }
 
@@ -330,11 +356,11 @@ function calculateStatistics(locations) {
     stats.totalRumahIbadatRusak += loc.Rumah_Ibadat_Rusak || 0;
     stats.totalJembatanRusak += loc.Jembatan_Rusak || 0;
 
-    // Track latest sync time
-    if (loc.Last_Sync_BNPB) {
-      const syncTime = new Date(loc.Last_Sync_BNPB);
+    // Track latest sync time from Airtable's Last Updated field
+    if (loc['Last Updated']) {
+      const syncTime = new Date(loc['Last Updated']);
       if (!stats.lastSync || syncTime > new Date(stats.lastSync)) {
-        stats.lastSync = loc.Last_Sync_BNPB;
+        stats.lastSync = loc['Last Updated'];
       }
     }
   });
@@ -362,7 +388,7 @@ function calculateSumatraStatistics(locations) {
     ...stats,
     regionName: 'Data Banjir Sumatra',
     // Use Last Updated field from Airtable as lastSync
-    lastSync: stats.lastSync || new Date().toISOString()
+    lastSync: stats.lastSync
   };
 }
 

@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { startBNPBSyncScheduler } = require('./scheduler/bnpbSync');
 const { startAirtableBNPBSyncScheduler } = require('./scheduler/airtableBnpbSync');
+const { startNewsSyncScheduler } = require('./scheduler/newsSync');
 
 dotenv.config();
 
@@ -25,6 +26,9 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/kawal-ban
 
     // Airtable sync (every 6 hours)
     startAirtableBNPBSyncScheduler();
+
+    // News scraping sync (every 6 hours)
+    startNewsSyncScheduler();
   })
   .catch((err) => console.error('❌ MongoDB Connection Error:', err));
 

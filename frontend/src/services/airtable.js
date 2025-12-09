@@ -43,7 +43,6 @@ const getAllRecords = async (tableName, params = {}) => {
 
     return allRecords;
   } catch (error) {
-    console.error(`Error fetching records from ${tableName}:`, error.response?.data || error.message);
     throw error;
   }
 };
@@ -65,7 +64,6 @@ export const airtableService = {
         ...record.fields
       }));
     } catch (error) {
-      console.error('Error fetching locations:', error);
       throw error;
     }
   },
@@ -78,7 +76,6 @@ export const airtableService = {
         ...response.data.fields
       };
     } catch (error) {
-      console.error('Error fetching location:', error);
       throw error;
     }
   },
@@ -87,61 +84,161 @@ export const airtableService = {
   getReportsInbox: async (filters = {}) => {
     try {
       const records = await getAllRecords(TABLES.REPORTS_INBOX);
-      return records.map(record => {
+
+      const reports = records.map(record => {
         const fields = record.fields;
 
-        // Parse coordinates - handle different formats
+        // Parse coordinates - handle different formats and field names
         let coordinates = [];
-        if (fields.coordinates) {
-          if (typeof fields.coordinates === 'string') {
+        const coordField = fields.coordinates ||
+                          fields.Coordinates ||
+                          fields['Location Coordinates'] ||
+                          fields['coordinates (from Locations)'] ||  // Lookup field
+                          fields['Coordinates (from Locations)'];    // Lookup field
+
+        if (coordField) {
+          // Handle Airtable lookup fields (returns array)
+          let coordValue = coordField;
+          if (Array.isArray(coordField) && coordField.length > 0) {
+            coordValue = coordField[0]; // Take first value from lookup array
+          }
+
+          if (typeof coordValue === 'string') {
             // Parse string format "lng,lat" or "[lng,lat]"
-            const coordStr = fields.coordinates.replace(/[\[\]]/g, '').trim();
+            const coordStr = coordValue.replace(/[\[\]]/g, '').trim();
             const parts = coordStr.split(',').map(s => parseFloat(s.trim()));
             if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
               coordinates = [parts[0], parts[1]];
             }
-          } else if (Array.isArray(fields.coordinates)) {
-            coordinates = fields.coordinates;
+          } else if (Array.isArray(coordValue) && coordValue.length >= 2) {
+            coordinates = coordValue;
           }
         }
 
-        // Parse imageUrls - handle string or array
+        // Parse imageUrls - handle string or array and different field names
         let imageUrls = [];
-        if (fields.imageUrls) {
-          if (typeof fields.imageUrls === 'string') {
-            imageUrls = fields.imageUrls.split(',').map(url => url.trim());
-          } else if (Array.isArray(fields.imageUrls)) {
-            imageUrls = fields.imageUrls;
+        const imgField = fields.imageUrls || fields.ImageUrls || fields['Image URLs'] || fields.Images || fields.Photo;
+
+
+        if (imgField) {
+          if (typeof imgField === 'string') {
+            imageUrls = imgField.split(',').map(url => url.trim());
+          } else if (Array.isArray(imgField)) {
+            // Airtable attachments are objects with 'url' property
+            imageUrls = imgField.map(item => {
+              if (typeof item === 'string') return item;
+              if (item && item.url) {
+                return item.url;
+              }
+              return null;
+            }).filter(url => url !== null);
           }
         }
 
-        // ⚠️ Skip reports with invalid coordinates (don't use [0,0] fallback!)
-        // [0,0] is in the ocean near Africa and causes map to pan there
-        if (coordinates.length !== 2 || isNaN(coordinates[0]) || isNaN(coordinates[1])) {
-          return null;  // Skip this report
+
+        // NOTE: Coordinates are optional - reports are only shown in sidebar, not on map
+        // Only validate coordinates if they exist (for potential future use)
+        if (coordinates.length === 2 && !isNaN(coordinates[0]) && !isNaN(coordinates[1])) {
+        } else {
+          coordinates = []; // Clear invalid coordinates
         }
+
+        // Map field names - support different naming conventions
+        // Priority: Use Loc Name lookup field (shows actual name), NOT Locations (which is record ID)
+        const locNameLookup = fields['Loc Name (from Locations)'];  // Lookup field - best option
+        const bpsCodeLookup = fields['BPS Code (from Locations)'];   // BPS Code lookup
+        const locationTextUser = fields['Location Text'];             // User input (provinsi)
+
+        // Extract kabupaten name from lookup (Airtable returns array for lookup fields)
+        let kabupatenName = '';
+        if (locNameLookup) {
+          if (Array.isArray(locNameLookup) && locNameLookup.length > 0) {
+            kabupatenName = locNameLookup[0]; // Take first element
+          } else if (typeof locNameLookup === 'string') {
+            kabupatenName = locNameLookup;
+          }
+        } else {
+        }
+
+        // Extract BPS code for reference
+        let bpsCode = '';
+        if (bpsCodeLookup) {
+          if (Array.isArray(bpsCodeLookup) && bpsCodeLookup.length > 0) {
+            bpsCode = bpsCodeLookup[0];
+          } else if (typeof bpsCodeLookup === 'string') {
+            bpsCode = bpsCodeLookup;
+          }
+        }
+
+        // Build location name: "Provinsi, Kabupaten" format
+        // Example: "Aceh, Kabupaten Aceh Utara"
+        let locationName = '';
+
+        // Priority: Try to build "Provinsi, Kabupaten" format
+        if (kabupatenName && locationTextUser) {
+          // Both available: "Aceh, Kabupaten Aceh Utara"
+          locationName = `${locationTextUser}, ${kabupatenName}`;
+        } else if (kabupatenName) {
+          // Only kabupaten: just show it
+          locationName = kabupatenName;
+        } else if (locationTextUser) {
+          // Only provinsi: just show it (current issue)
+          locationName = locationTextUser;
+        } else {
+          // Fallback
+          locationName = fields.locationName || fields.location_name || 'Lokasi tidak diketahui';
+        }
+
+        const description = fields.description ||
+                           fields.Description ||
+                           fields.details ||
+                           fields.Details ||
+                           '';
+
+        // Get reporter name for display
+        const reporterName = fields['Reporter Name'] || fields.ReporterName || fields.reporter_name || '';
+
+        const contactSource = fields.contactSource ||
+                             fields.contact_source ||
+                             fields['Contact (Social Media Handle)'] ||
+                             fields.Contact ||
+                             '';
 
         // Transform to backend-compatible format
-        return {
+        const report = {
+          // Include all other fields FIRST (so our custom fields override them)
+          ...fields,
+          // Then add our processed fields (these will override any conflicts)
           _id: record.id,  // Use Airtable record ID as _id
           id: record.id,   // Keep id for compatibility
-          location: {
-            type: 'Point',
-            coordinates: coordinates  // Already validated above
-          },
-          locationName: fields.locationName || fields.location_name || '',
-          description: fields.description || '',
-          category: fields.category || 'lainnya',
-          severity: fields.severity || 'ringan',
-          timestamp: fields.timestamp || fields.created || new Date().toISOString(),
-          contactSource: fields.contactSource || fields.contact_source || '',
-          imageUrls: imageUrls,
-          // Include all other fields
-          ...fields
+          locationName: locationName,  // "Provinsi, Kabupaten" format - OVERRIDE!
+          kabupatenName: kabupatenName,  // Just kabupaten name
+          provinsiName: locationTextUser,  // Just provinsi name
+          bpsCode: bpsCode,  // BPS code for reference
+          reporterName: reporterName,  // Reporter name
+          description: description,
+          category: fields.category || fields.Category || fields.Kategori_Bencana || 'banjir',  // Default to banjir instead of lainnya
+          severity: fields.severity || fields.Severity || 'ringan',
+          timestamp: fields.timestamp || fields.Timestamp || fields['Submission Time'] || fields.created || fields.Created || new Date().toISOString(),
+          contactSource: contactSource,
+          imageUrls: imageUrls
         };
-      }).filter(report => report !== null);  // Filter out null (invalid) reports
+
+        // Add location object only if coordinates are valid
+        if (coordinates.length === 2) {
+          report.location = {
+            type: 'Point',
+            coordinates: coordinates
+          };
+        }
+
+        return report;
+      });
+
+      // All reports are valid - no filtering needed (reports don't need coordinates for sidebar display)
+
+      return reports;
     } catch (error) {
-      console.error('Error fetching reports:', error);
       throw error;
     }
   },
@@ -154,7 +251,6 @@ export const airtableService = {
         ...response.data.fields
       };
     } catch (error) {
-      console.error('Error fetching report:', error);
       throw error;
     }
   },
@@ -169,7 +265,71 @@ export const airtableService = {
         ...response.data.fields
       };
     } catch (error) {
-      console.error('Error creating report:', error);
+      throw error;
+    }
+  },
+
+  // Get reports filtered by location (similar to getNewsByLocation)
+  getReportsByLocation: async (regionData = null) => {
+    try {
+
+      // Get all reports
+      const allReports = await airtableService.getReportsInbox();
+
+      // If no region specified, return all reports
+      if (!regionData) {
+        return allReports;
+      }
+
+      // Helper: normalize string for comparison (remove spaces, lowercase, handle sumatra/sumatera)
+      const normalize = (str) => {
+        if (!str) return '';
+        return str.toLowerCase()
+          .replace(/sumatera/g, 'sumatra')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
+
+      // Filter reports by location name matching
+      const filteredReports = allReports.filter(report => {
+        // Get location from report - check multiple field names
+        const locationText = normalize(report['Location Text'] || report.locationText || report.locationName || '');
+        const locationsLinked = report.Locations || report.locations || ''; // Linked record (could be name or ID)
+        const locName = normalize(report['Loc Name (from Locations)'] || '');
+
+        if (!locationText && !locationsLinked && !locName) {
+          return false;
+        }
+
+        // Get region names to match
+        const namaProvinsi = normalize(regionData.namaProvinsi || '');
+        const namaKabupaten = normalize(regionData.namaKabupaten || '');
+        const namaKecamatan = normalize(regionData.namaKecamatan || '');
+
+        // Combine all location fields for matching
+        const combinedLocation = `${locationText} ${locationsLinked} ${locName}`.toLowerCase();
+
+
+        // Match by admin level
+        if (regionData.adminLevel === 'provinsi' && namaProvinsi) {
+          const matches = combinedLocation.includes(namaProvinsi) ||
+                         namaProvinsi.includes(locationText);
+          return matches;
+        } else if (regionData.adminLevel === 'kabupaten' && namaKabupaten) {
+          const matches = combinedLocation.includes(namaKabupaten) ||
+                         namaKabupaten.includes(locationText);
+          return matches;
+        } else if (regionData.adminLevel === 'kecamatan' && namaKecamatan) {
+          const matches = combinedLocation.includes(namaKecamatan) ||
+                         namaKecamatan.includes(locationText);
+          return matches;
+        }
+
+        return false;
+      });
+
+      return filteredReports;
+    } catch (error) {
       throw error;
     }
   },
@@ -184,12 +344,11 @@ export const airtableService = {
         ...response.data.fields
       };
     } catch (error) {
-      console.error('Error updating report:', error);
       throw error;
     }
   },
 
-  // ===== STATUS LOG =====
+  // ===== STATUS LOG / NEWS =====
   getStatusLogs: async (filters = {}) => {
     try {
       const records = await getAllRecords(TABLES.STATUS_LOG);
@@ -198,7 +357,176 @@ export const airtableService = {
         ...record.fields
       }));
     } catch (error) {
-      console.error('Error fetching status logs:', error);
+      throw error;
+    }
+  },
+
+  // Get news (alias for getStatusLogs)
+  getNews: async () => {
+    try {
+      const records = await getAllRecords(TABLES.STATUS_LOG);
+      return records.map(record => {
+        const fields = record.fields;
+
+        // Handle locationName - Airtable lookup fields return ARRAY, not string
+        let locationName = '';
+        const locNameField = fields['Loc Name (from Locations)'];
+
+        if (locNameField) {
+          if (Array.isArray(locNameField)) {
+            // Airtable lookup field - take first element
+            locationName = locNameField[0] || '';
+          } else if (typeof locNameField === 'string') {
+            // Already a string
+            locationName = locNameField;
+          }
+        }
+
+        // Handle locationCode - ONLY from BPS Code lookup field, NOT from Locations (which is record ID)
+        let locationCode = '';
+        const bpsCodeField = fields['BPS Code (from Locations)'];
+
+        if (bpsCodeField) {
+          if (Array.isArray(bpsCodeField)) {
+            locationCode = bpsCodeField[0] || '';
+          } else {
+            locationCode = bpsCodeField;
+          }
+        }
+
+        // Transform to consistent format
+        return {
+          id: record.id,
+          headline: fields.Headline || '',
+          locationCode: locationCode,
+          locationName: locationName,
+          eventTime: fields['Event Time'] || '',
+          details: fields.Details || '',
+          category: fields.Category || '',
+          sourceLink: fields['Source Link'] || '',
+          // Include all other fields
+          ...fields
+        };
+      });
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Helper: Normalize BPS code format (remove dots)
+  // "12.03" → "1203", "12.03.29" → "120329"
+  normalizeCode: (code) => {
+    if (!code) return null;
+    return String(code).replace(/\./g, '').replace(/^0+$/, '00'); // Handle "00" case for Sumatra
+  },
+
+  // Helper: Extract kabupaten code from kecamatan BPS code
+  // "12.03.29" → "1203", "12.03" → "1203", "12" → "12"
+  extractKabupatenCode: (bpsCode) => {
+    if (!bpsCode) return null;
+
+    const parts = String(bpsCode).split('.');
+
+    // If kecamatan (3 parts: "12.03.29"), extract kabupaten (first 2 parts)
+    if (parts.length >= 3) {
+      return parts.slice(0, 2).join(''); // "12" + "03" = "1203"
+    }
+
+    // If already kabupaten (2 parts: "12.03"), normalize
+    if (parts.length === 2) {
+      return parts.join(''); // "12" + "03" = "1203"
+    }
+
+    // If provinsi (1 part: "12"), return as-is
+    return airtableService.normalizeCode(bpsCode);
+  },
+
+  // Get news filtered by location name and optionally by location code
+  getNewsByLocation: async (locationName, locationCode = null) => {
+    try {
+      const allNews = await airtableService.getNews();
+
+      // If no location specified or location is "Indonesia" or "Sumatra", return all news
+      // INCLUDE both Indonesia and generic Sumatra news as default
+      const isDefaultView = !locationName ||
+                           locationName.toLowerCase() === 'indonesia' ||
+                           locationName.toLowerCase() === 'sumatra' ||
+                           locationName.toLowerCase() === 'sumatera';
+
+      if (isDefaultView) {
+        return allNews.filter(news => {
+          const newsLoc = (news.locationName || '').toLowerCase().trim();
+          // Include Indonesia + generic "Sumatra" news (that can't be selected by user)
+          return newsLoc === 'indonesia' || newsLoc === 'sumatra' || newsLoc === 'sumatera';
+        });
+      }
+
+      // Helper function to normalize Sumatra/Sumatera variants
+      const normalizeSumatra = (str) => {
+        return str.toLowerCase().trim()
+          .replace(/sumatera/g, 'sumatra')  // Normalize to "sumatra"
+          .replace(/\s+/g, ' ');             // Normalize whitespace
+      };
+
+      // Filter by location name (case-insensitive partial match)
+      const normalizedLocation = normalizeSumatra(locationName);
+
+      // Normalize search location code for comparison
+      const normalizedSearchCode = locationCode ? airtableService.normalizeCode(locationCode) : null;
+
+      const matchedNews = allNews.filter(news => {
+        // locationName is now guaranteed to be a string (handled in getNews())
+        const newsLocation = normalizeSumatra(news.locationName || '');
+
+        // Skip empty locations
+        if (!newsLocation) return false;
+
+        // Skip generic "Sumatra" when searching for specific province
+        // e.g., when searching "Sumatra Barat", don't include "Sumatra" news
+        const isGenericSumatra = newsLocation === 'sumatra';
+        const isSearchingSpecificProvince = normalizedLocation.includes('utara') ||
+                                           normalizedLocation.includes('barat') ||
+                                           normalizedLocation.includes('selatan');
+
+        if (isGenericSumatra && isSearchingSpecificProvince) {
+          return false; // Skip generic Sumatra news when searching specific province
+        }
+
+        // 1. Match by location name (exact match or contains)
+        const nameMatch = newsLocation === normalizedLocation ||
+                         newsLocation.includes(normalizedLocation) ||
+                         normalizedLocation.includes(newsLocation);
+
+        if (nameMatch) {
+          return true;
+        }
+
+        // 2. Match by BPS Code hierarchy (untuk grouping kecamatan ke kabupaten)
+        // This allows kecamatan news to appear when user clicks on kabupaten
+        if (normalizedSearchCode && news.locationCode) {
+          // Extract kabupaten code from news location code
+          // If news is kecamatan "12.03.29", extract "1203"
+          // If news is kabupaten "12.03", extract "1203"
+          const newsKabCode = airtableService.extractKabupatenCode(news.locationCode);
+
+          // If search is for kabupaten "1203", match news with kabupaten code "1203"
+          // This makes kecamatan news (12.03.29 → 1203) appear under kabupaten (1203)
+          if (newsKabCode && newsKabCode === normalizedSearchCode) {
+            return true;
+          }
+
+          // Also check direct code match for provinsi level
+          const newsProvinsiCode = airtableService.normalizeCode(news.locationCode);
+          if (newsProvinsiCode && newsProvinsiCode === normalizedSearchCode) {
+            return true;
+          }
+        }
+
+        return false;
+      });
+
+      return matchedNews;
+    } catch (error) {
       throw error;
     }
   },
@@ -216,7 +544,6 @@ export const airtableService = {
         ...record.fields
       }));
     } catch (error) {
-      console.error('Error fetching active statuses:', error);
       throw error;
     }
   },
@@ -231,7 +558,6 @@ export const airtableService = {
         ...response.data.fields
       };
     } catch (error) {
-      console.error('Error creating status log:', error);
       throw error;
     }
   },
@@ -245,7 +571,6 @@ export const airtableService = {
         ...record.fields
       }));
     } catch (error) {
-      console.error('Error fetching organizations:', error);
       throw error;
     }
   },
@@ -258,7 +583,6 @@ export const airtableService = {
         ...response.data.fields
       };
     } catch (error) {
-      console.error('Error fetching organization:', error);
       throw error;
     }
   },
@@ -290,7 +614,6 @@ export const airtableService = {
               // Parse the JSON string which contains full GeoJSON object
               geometry = JSON.parse(geometryCoordinatesField);
             } catch (e) {
-              console.warn('❌ Failed to parse Geometry Coordinates for record:', record.id, e.message);
               return null;
             }
           } else if (typeof geometryCoordinatesField === 'object') {
@@ -303,7 +626,6 @@ export const airtableService = {
             try {
               geometry = JSON.parse(fields.geometry);
             } catch (e) {
-              console.warn('❌ Failed to parse geometry field for record:', record.id);
               return null;
             }
           } else if (typeof fields.geometry === 'object') {
@@ -312,7 +634,6 @@ export const airtableService = {
         }
 
         if (!geometry) {
-          console.warn('⚠️ No geometry found for record:', record.id);
           return null;
         }
 
@@ -414,10 +735,6 @@ export const airtableService = {
 
         // ❌ EXCLUDE boundaries with invalid coordinates (outside Sumatra)
         if (!isWithinSumatraBounds(feature.geometry)) {
-          console.warn('⚠️ [Airtable] Skipping boundary outside Sumatra:', {
-            nama: feature.properties.namaProvinsi || feature.properties.namaKabupaten,
-            adminLevel: adminLevel
-          });
           return false;
         }
 
@@ -436,7 +753,6 @@ export const airtableService = {
 
       return geojson;
     } catch (error) {
-      console.error('❌ [Airtable] Error fetching boundaries:', error);
       throw error;
     }
   },
@@ -459,7 +775,6 @@ export const airtableService = {
         baseId: AIRTABLE_BASE_ID
       };
     } catch (error) {
-      console.error('Airtable health check failed:', error);
       return {
         status: 'error',
         message: error.message

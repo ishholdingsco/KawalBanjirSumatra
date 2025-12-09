@@ -16,7 +16,8 @@ function App() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Open by default on desktop (>= 768px), closed on mobile
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   // Statistics state
@@ -26,21 +27,31 @@ function App() {
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [showStatistics, setShowStatistics] = useState(true);
 
+  // News state
+  const [news, setNews] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsError, setNewsError] = useState(null);
+  const [selectedNews, setSelectedNews] = useState(null);
+  const [selectedLocationName, setSelectedLocationName] = useState('Sumatra');
+
   // Fetch data on mount
   useEffect(() => {
-    fetchReports();
+    fetchReports(null); // Fetch all reports by default (no region filter)
     fetchStatistics(null); // Fetch Sumatra statistics on initial load
+    fetchNews('Sumatra'); // Fetch Sumatra news by default (includes Indonesia + Sumatra)
   }, []);
 
-  const fetchReports = async () => {
+  const fetchReports = async (regionData = null) => {
     try {
       setLoading(true);
-      const data = await dataService.getReports();
+
+      // Fetch reports filtered by region (or all if regionData is null)
+      const data = await dataService.getReportsByLocation(regionData);
+
       setReports(data);
       setFilteredReports(data);
       setError(null);
     } catch (err) {
-      console.error('Error fetching reports:', err);
       setError('Gagal memuat data laporan. Periksa koneksi Airtable Anda.');
     } finally {
       setLoading(false);
@@ -79,17 +90,62 @@ function App() {
         setStatistics(data);
       }
     } catch (err) {
-      console.error('Error fetching statistics:', err);
       setStatsError(regionData ? 'Gagal memuat statistik untuk wilayah ini.' : 'Gagal memuat statistik.');
     } finally {
       setStatsLoading(false);
     }
   };
 
+  const fetchNews = async (locationName, locationCode = null) => {
+    try {
+      setNewsLoading(true);
+      setNewsError(null);
+
+      // Fetch news filtered by location name and optionally by location code
+      // locationCode helps group kecamatan news under kabupaten
+      const data = await dataService.getNewsByLocation(locationName || 'Sumatra', locationCode);
+      setNews(data);
+      setSelectedLocationName(locationName || 'Sumatra');
+    } catch (err) {
+      setNewsError('Gagal memuat berita untuk wilayah ini.');
+    } finally {
+      setNewsLoading(false);
+    }
+  };
+
   const handleRegionClick = (regionData) => {
     setSelectedRegion(regionData);
     setShowStatistics(true);
+
+    // Only auto-open sidebar on desktop (>= 768px), not on mobile
+    if (window.innerWidth >= 768) {
+      setSidebarOpen(true);
+    }
+
+    // Fetch statistics for the region
     fetchStatistics(regionData);
+
+    // Fetch reports filtered by region
+    fetchReports(regionData);
+
+    // Fetch news for the region based on admin level
+    // Pass both location name and location code for better filtering
+    let locationNameForNews = 'Indonesia';
+    let locationCodeForNews = null;
+
+    if (regionData.adminLevel === 'provinsi') {
+      locationNameForNews = regionData.namaProvinsi;
+      locationCodeForNews = regionData.kodeProvinsi;
+    } else if (regionData.adminLevel === 'kabupaten') {
+      locationNameForNews = regionData.namaKabupaten;
+      locationCodeForNews = regionData.kodeKabupaten;
+    } else if (regionData.adminLevel === 'kecamatan') {
+      locationNameForNews = regionData.namaKecamatan;
+      locationCodeForNews = regionData.kodeKecamatan;
+    }
+
+    // Pass location code to enable kecamatan-to-kabupaten grouping
+    fetchNews(locationNameForNews, locationCodeForNews);
   };
 
   const handleCloseStatistics = () => {
@@ -120,9 +176,13 @@ function App() {
     setSelectedReport(report);
   };
 
+  const handleNewsClick = (newsItem) => {
+    setSelectedNews(newsItem);
+  };
+
   const handleAddReport = () => {
-    // TODO: Open form modal or redirect to form page
-    alert('Fitur tambah laporan akan segera hadir!\n\nAnda dapat menambahkan data langsung melalui Airtable.');
+    // Open Google Form in new tab
+    window.open('https://docs.google.com/forms/d/e/1FAIpQLSfG6iVMV_NZJxfCnRKZClQW4CZTWMTdNbPKhmejaSjn0kI2hw/viewform', '_blank');
   };
 
   return (
@@ -138,33 +198,22 @@ function App() {
         <div className="flex-1 relative">
           {/* Map with skeleton loading */}
           <Suspense fallback={
-            <div className="absolute inset-0 bg-gray-100 overflow-hidden">
-              {/* Skeleton for map controls (top right) */}
-              <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
-                <div className="w-8 h-8 bg-gray-300 rounded shadow-md animate-pulse"></div>
-                <div className="w-8 h-8 bg-gray-300 rounded shadow-md animate-pulse"></div>
-                <div className="w-8 h-8 bg-gray-300 rounded shadow-md animate-pulse"></div>
-              </div>
-
-              {/* Map skeleton with shimmer effect */}
-              <div className="absolute inset-0 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300">
-                {/* Shimmer animation overlay */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
-
-                {/* Fake map grid pattern */}
-                <div className="absolute inset-0 opacity-10">
-                  <div className="grid grid-cols-4 grid-rows-4 h-full w-full">
-                    {[...Array(16)].map((_, i) => (
-                      <div key={i} className="border border-gray-400"></div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Random marker skeletons for realism */}
-                <div className="absolute top-1/4 left-1/3 w-6 h-6 bg-blue-300 rounded-full animate-pulse shadow-md"></div>
-                <div className="absolute top-1/2 left-1/2 w-6 h-6 bg-red-300 rounded-full animate-pulse shadow-md"></div>
-                <div className="absolute top-2/3 left-2/3 w-6 h-6 bg-yellow-300 rounded-full animate-pulse shadow-md"></div>
-              </div>
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ background: '#bfddf8' }}
+            >
+              {/* Logo with blinking animation - Mobile */}
+              <img
+                src="/logo-mobile.png"
+                alt="Kawal Banjir Sumatra"
+                className="h-20 w-auto sm:hidden animate-pulse"
+              />
+              {/* Logo with blinking animation - Desktop/Tablet */}
+              <img
+                src="/logo.png"
+                alt="Kawal Banjir Sumatra"
+                className="h-24 w-auto hidden sm:block animate-pulse"
+              />
             </div>
           }>
             <Map
@@ -176,7 +225,8 @@ function App() {
           </Suspense>
 
           {/* Statistics Panel - show by default, can be closed */}
-          {showStatistics && (
+          {/* Only show after map is loaded to prevent UI flash during skeleton loading */}
+          {mapLoaded && showStatistics && (
             <div className="absolute top-4 left-4 max-w-md" style={{ zIndex: Z_INDEX.overlay }}>
               <StatisticsPanel
                 statistics={statistics}
@@ -205,55 +255,70 @@ function App() {
 
 
           {/* Add Report Button (Desktop) */}
-          <Button
-            onClick={handleAddReport}
-            className={`
-              hidden md:flex absolute bottom-6 left-6 items-center gap-2 px-5 py-3
-              text-gray-800 rounded-full
-              shadow-[0_8px_30px_rgb(0,0,0,0.3)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.4)] hover:scale-105
-              ${ANIMATIONS.transition}
-            `}
-            style={{ background: '#bfddf8' }}
-          >
-            <Plus className="h-5 w-5" />
-            <span className="font-semibold">Tambah Laporan</span>
-          </Button>
+          {/* Only show after map is loaded to prevent UI flash during skeleton loading */}
+          {mapLoaded && (
+            <Button
+              onClick={handleAddReport}
+              className={`
+                hidden md:flex absolute bottom-6 left-6 items-center gap-2 px-5 py-3
+                text-gray-800 rounded-full
+                shadow-[0_8px_30px_rgb(0,0,0,0.3)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.4)] hover:scale-105
+                ${ANIMATIONS.transition}
+              `}
+              style={{ background: '#bfddf8' }}
+            >
+              <Plus className="h-5 w-5" />
+              <span className="font-semibold">Tambah Laporan</span>
+            </Button>
+          )}
         </div>
 
         {/* Sidebar Section - Always overlay (absolute) on all devices */}
-        <div
-          className={`
-            absolute inset-y-0 right-0
-            w-full sm:w-80 md:w-96
-            transform ${ANIMATIONS.transition}
-            ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}
-            border-l shadow-2xl
-          `}
-          style={{ zIndex: Z_INDEX.sidebar }}
-        >
-          <Sidebar
-            reports={filteredReports}
-            selectedReport={selectedReport}
-            onReportClick={handleReportClick}
-            onClose={() => setSidebarOpen(false)}
-          />
-        </div>
+        {/* Only render after map is loaded to prevent UI flash during skeleton loading */}
+        {mapLoaded && (
+          <div
+            className={`
+              absolute inset-y-0 right-0
+              w-full sm:w-80 md:w-96
+              transform ${ANIMATIONS.transition}
+              ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+              border-l shadow-2xl
+            `}
+            style={{ zIndex: Z_INDEX.sidebar }}
+          >
+            <Sidebar
+              reports={filteredReports}
+              reportsLoading={loading}
+              selectedReport={selectedReport}
+              onReportClick={handleReportClick}
+              news={news}
+              newsLoading={newsLoading}
+              selectedNews={selectedNews}
+              onNewsClick={handleNewsClick}
+              locationName={selectedLocationName}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Mobile Add Button */}
-      <Button
-        onClick={handleAddReport}
-        className={`
-          md:hidden fixed bottom-6 right-6 w-16 h-16
-          text-gray-800 rounded-full
-          shadow-[0_8px_30px_rgb(0,0,0,0.3)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.4)] hover:scale-110 active:scale-95
-          ${ANIMATIONS.transition}
-        `}
-        style={{ zIndex: Z_INDEX.fab, background: '#bfddf8' }}
-        size="icon"
-      >
-        <Plus className="h-7 w-7" />
-      </Button>
+      {/* Only show after map is loaded to prevent UI flash during skeleton loading */}
+      {mapLoaded && (
+        <Button
+          onClick={handleAddReport}
+          className={`
+            md:hidden fixed bottom-6 right-6 w-16 h-16
+            text-gray-800 rounded-full
+            shadow-[0_8px_30px_rgb(0,0,0,0.3)] hover:shadow-[0_12px_40px_rgb(0,0,0,0.4)] hover:scale-110 active:scale-95
+            ${ANIMATIONS.transition}
+          `}
+          style={{ zIndex: Z_INDEX.fab, background: '#bfddf8' }}
+          size="icon"
+        >
+          <Plus className="h-7 w-7" />
+        </Button>
+      )}
 
       {/* No overlay backdrop - let users see the map while sidebar is open */}
     </div>
