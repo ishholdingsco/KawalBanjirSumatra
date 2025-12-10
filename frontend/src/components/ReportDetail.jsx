@@ -1,7 +1,8 @@
 import { Clock, MapPin, User, Tag, ChevronRight, Image as ImageIcon, Building2 } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { cn } from '../lib/utils';
-import { SEVERITY_CONFIG, CATEGORY_CONFIG } from '../lib/constants';
+import { CATEGORY_CONFIG } from '../lib/constants';
+import { getReportSeverity } from '../lib/reportUtils';
 
 export default function ReportDetail({ report, onBack }) {
   if (!report) return null;
@@ -23,15 +24,18 @@ export default function ReportDetail({ report, onBack }) {
     }
   };
 
-  const severityConfig = SEVERITY_CONFIG[report.severity] || SEVERITY_CONFIG['ringan'];
-  const categoryConfig = CATEGORY_CONFIG[report.category] || CATEGORY_CONFIG['lainnya'];
+  // 🔥 Get severity dynamically from location damage
+  const severityConfig = getReportSeverity(report);
+
+  // Get category config from Airtable field "Category"
+  const categoryConfig = CATEGORY_CONFIG[report.category || report.Category] || CATEGORY_CONFIG['default'];
 
   return (
     <div className="h-full overflow-y-auto bg-white">
       <div className="p-4">
-        {/* Header: Back button + Severity Badge */}
+        {/* Header: Badges + Back button */}
         <div className="flex items-center justify-between mb-3">
-          {/* Severity Badge */}
+          {/* Severity & Category Badges */}
           <div className="flex items-center gap-2">
             <div className={cn(
               "p-1.5 rounded-full shadow-sm",
@@ -41,9 +45,14 @@ export default function ReportDetail({ report, onBack }) {
                 {severityConfig.icon}
               </span>
             </div>
-            <Badge variant="none" className={cn("text-xs", severityConfig.color)}>
-              {severityConfig.label}
-            </Badge>
+            <div className="flex flex-col gap-1">
+              <Badge variant="none" className={cn("text-xs", severityConfig.color)}>
+                {severityConfig.label}
+              </Badge>
+              <Badge variant="none" className={cn("text-xs", categoryConfig.color)}>
+                {categoryConfig.label}
+              </Badge>
+            </div>
           </div>
 
           {/* Back Button - di kanan */}
@@ -128,30 +137,36 @@ export default function ReportDetail({ report, onBack }) {
                 Foto Dokumentasi
               </h2>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {report.imageUrls.map((url, index) => (
-                <a
-                  key={index}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors group"
-                >
-                  <img
-                    src={url}
-                    alt={`Foto ${index + 1}`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={(e) => {
-                      e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23f3f4f6" width="100" height="100"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%239ca3af" font-family="sans-serif" font-size="12"%3EGambar tidak tersedia%3C/text%3E%3C/svg%3E';
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full p-1.5">
-                      <ImageIcon className="h-3.5 w-3.5 text-gray-700" />
+            <div className="space-y-2">
+              {report.imageUrls.map((url, index) => {
+                const reporterName = report.reporterName || report['Reporter Name'] || 'Pelapor';
+                return (
+                  <a
+                    key={index}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors group"
+                  >
+                    <div className="flex-shrink-0 p-2 bg-blue-500 rounded-lg">
+                      <ImageIcon className="h-4 w-4 text-white" />
                     </div>
-                  </div>
-                </a>
-              ))}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        Foto dari {reporterName}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Klik untuk melihat foto
+                      </p>
+                    </div>
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-500 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}

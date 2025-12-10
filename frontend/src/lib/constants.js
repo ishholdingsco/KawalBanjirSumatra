@@ -50,53 +50,95 @@ export const Z_INDEX = {
   toast: 100,
 }
 
+// 🔥 Damage Severity Config - Based on Kerusakan (Total Damage)
+// Aligned with Map.jsx color gradient (line 417-427)
 export const SEVERITY_CONFIG = {
-  'ringan': {
+  'no-damage': {
+    label: 'Tidak Ada Kerusakan',
+    color: 'bg-blue-100 text-blue-800 border-blue-300',
+    markerColor: '#3B82F6', // blue-500
+    icon: '✅',
+    min: 0,
+    max: 0.1
+  },
+  'minimal': {
+    label: 'Minimal',
+    color: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+    markerColor: '#FDE047', // yellow-300
+    icon: '⚠️',
+    min: 0.1,
+    max: 100
+  },
+  'light': {
     label: 'Ringan',
     color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    markerColor: '#fbbf24', // yellow-400
-    icon: '⚠️'
+    markerColor: '#FBBF24', // yellow-400
+    icon: '⚠️',
+    min: 100,
+    max: 500
   },
-  'sedang': {
+  'moderate': {
     label: 'Sedang',
     color: 'bg-orange-100 text-orange-800 border-orange-300',
-    markerColor: '#f97316', // orange-500
-    icon: '🔶'
+    markerColor: '#F97316', // orange-500
+    icon: '🔶',
+    min: 500,
+    max: 1000
   },
-  'berat': {
+  'significant': {
+    label: 'Signifikan',
+    color: 'bg-orange-200 text-orange-900 border-orange-400',
+    markerColor: '#EA580C', // orange-600
+    icon: '🔶',
+    min: 1000,
+    max: 5000
+  },
+  'severe': {
     label: 'Berat',
     color: 'bg-red-100 text-red-800 border-red-300',
-    markerColor: '#dc2626', // red-600
-    icon: '🔴'
+    markerColor: '#DC2626', // red-600
+    icon: '🔴',
+    min: 5000,
+    max: 10000
   },
-  'sangat-berat': {
+  'catastrophic': {
     label: 'Sangat Berat',
     color: 'bg-red-900 text-white border-red-900',
-    markerColor: '#7f1d1d', // red-900
-    icon: '🚨'
+    markerColor: '#7F1D1D', // red-900
+    icon: '🚨',
+    min: 10000,
+    max: Infinity
   }
 }
 
+// Report & News Category Config - Based on Airtable field "Category"
+// Used by ReportCard, ReportDetail, NewsCard, NewsDetail
 export const CATEGORY_CONFIG = {
-  'banjir': {
-    label: 'Banjir',
-    icon: '🌊',
-    color: 'text-blue-600'
+  'Flood Level': {
+    label: 'Tingkat Banjir',
+    color: 'bg-blue-100 text-blue-800',
+    icon: '💧'
   },
-  'banjir-bandang': {
-    label: 'Banjir Bandang',
-    icon: '🌪️',
-    color: 'text-red-600'
+  'Official': {
+    label: 'Resmi',
+    color: 'bg-green-100 text-green-800',
+    icon: '📋'
   },
-  'longsor': {
-    label: 'Longsor',
-    icon: '🏔️',
-    color: 'text-orange-600'
+  'Aid/Relief': {
+    label: 'Bantuan',
+    color: 'bg-purple-100 text-purple-800',
+    icon: '🤝'
   },
-  'lainnya': {
+  'Access': {
+    label: 'Akses',
+    color: 'bg-orange-100 text-orange-800',
+    icon: '🚧'
+  },
+  // Default fallback
+  'default': {
     label: 'Lainnya',
-    icon: '📍',
-    color: 'text-gray-600'
+    color: 'bg-gray-100 text-gray-800',
+    icon: '📰'
   }
 }
 

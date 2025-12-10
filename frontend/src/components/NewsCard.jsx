@@ -1,31 +1,7 @@
 import { Clock, ExternalLink, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Badge } from './ui/badge';
-import { ANIMATIONS } from '../lib/constants';
-
-// Category configuration for news - mirip struktur SEVERITY_CONFIG
-const NEWS_CATEGORY_CONFIG = {
-  'Flood Level': {
-    label: 'Tingkat Banjir',
-    color: 'bg-blue-100 text-blue-800',
-    icon: '💧'
-  },
-  'Official': {
-    label: 'Resmi',
-    color: 'bg-green-100 text-green-800',
-    icon: '📋'
-  },
-  'Aid/Relief': {
-    label: 'Bantuan',
-    color: 'bg-purple-100 text-purple-800',
-    icon: '🤝'
-  },
-  'Access': {
-    label: 'Akses',
-    color: 'bg-orange-100 text-orange-800',
-    icon: '🚧'
-  }
-};
+import { ANIMATIONS, CATEGORY_CONFIG } from '../lib/constants';
 
 export default function NewsCard({ news, isSelected, onClick }) {
   const formatDate = (dateString) => {
@@ -45,11 +21,8 @@ export default function NewsCard({ news, isSelected, onClick }) {
     }
   };
 
-  const categoryConfig = NEWS_CATEGORY_CONFIG[news.category] || {
-    label: news.category || 'Berita',
-    color: 'bg-gray-100 text-gray-800',
-    icon: '📰'
-  };
+  // Get category config from Airtable field "Category"
+  const categoryConfig = CATEGORY_CONFIG[news.category] || CATEGORY_CONFIG['default'];
 
   return (
     <div

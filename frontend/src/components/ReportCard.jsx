@@ -1,7 +1,8 @@
 import { Clock, MapPin, User, ImageIcon } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Badge } from './ui/badge';
-import { SEVERITY_CONFIG, CATEGORY_CONFIG, ANIMATIONS } from '../lib/constants';
+import { CATEGORY_CONFIG, ANIMATIONS } from '../lib/constants';
+import { getReportSeverity } from '../lib/reportUtils';
 
 export default function ReportCard({ report, isSelected, onClick }) {
   const formatDate = (dateString) => {
@@ -16,8 +17,11 @@ export default function ReportCard({ report, isSelected, onClick }) {
     return `${formatted} WIB`;
   };
 
-  const severityConfig = SEVERITY_CONFIG[report.severity] || SEVERITY_CONFIG['ringan'];
-  const categoryConfig = CATEGORY_CONFIG[report.category] || CATEGORY_CONFIG['lainnya'];
+  // 🔥 Get severity dynamically from location damage
+  const severityConfig = getReportSeverity(report);
+
+  // Get category config from Airtable field "Category"
+  const categoryConfig = CATEGORY_CONFIG[report.category || report.Category] || CATEGORY_CONFIG['default'];
 
   return (
     <div
@@ -47,13 +51,23 @@ export default function ReportCard({ report, isSelected, onClick }) {
             <h3 className="font-semibold text-base text-gray-900 leading-tight">
               {report.reporterName || report['Reporter Name'] || 'Anonim'}
             </h3>
-            <Badge
-              noHover={true}
-              variant="none"
-              className={cn("flex-shrink-0", severityConfig.color)}
-            >
-              {severityConfig.label}
-            </Badge>
+            {/* Severity & Category Badges */}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Badge
+                noHover={true}
+                variant="none"
+                className={cn("text-xs", severityConfig.color)}
+              >
+                {severityConfig.label}
+              </Badge>
+              <Badge
+                noHover={true}
+                variant="none"
+                className={cn("text-xs", categoryConfig.color)}
+              >
+                {categoryConfig.label}
+              </Badge>
+            </div>
           </div>
 
           {/* Location (Kabupaten/Kota) */}

@@ -24,6 +24,42 @@ const airtableApi = axios.create({
   },
 });
 
+// Helper: Convert Google Drive URL to direct image URL
+// Using /thumbnail endpoint which works as of 2024-2025
+// Reference: https://www.labnol.org/embed/google/drive
+const convertGoogleDriveUrl = (url) => {
+  if (!url) return null;
+
+  // Check if it's a Google Drive URL
+  if (url.includes('drive.google.com')) {
+    // Extract file ID from various Google Drive URL formats
+    let fileId = null;
+
+    // Format: https://drive.google.com/open?id=FILE_ID
+    let match = url.match(/[?&]id=([^&]+)/);
+    if (match) {
+      fileId = match[1];
+    }
+
+    // Format: https://drive.google.com/file/d/FILE_ID/
+    if (!fileId) {
+      match = url.match(/\/file\/d\/([^\/]+)/);
+      if (match) {
+        fileId = match[1];
+      }
+    }
+
+    // Convert to direct image URL using Google User Content CDN
+    // Note: File must be shared as "Anyone with the link can view"
+    if (fileId) {
+      return `https://lh3.googleusercontent.com/d/${fileId}=w2000`;
+    }
+  }
+
+  // Return original URL if not Google Drive or conversion fails
+  return url;
+};
+
 // Helper function to get all records (handles pagination)
 const getAllRecords = async (tableName, params = {}) => {
   let allRecords = [];
@@ -160,6 +196,9 @@ export const airtableService = {
             }).filter(url => url !== null);
           }
         }
+
+        // Convert Google Drive URLs to direct image URLs
+        imageUrls = imageUrls.map(url => convertGoogleDriveUrl(url)).filter(url => url !== null);
 
 
         // NOTE: Coordinates are optional - reports are only shown in sidebar, not on map

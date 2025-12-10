@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 're
 import mapboxgl from 'mapbox-gl';
 // IMPORTANT: CSS must be imported in the component when using lazy loading
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { SEVERITY_CONFIG, CATEGORY_CONFIG } from '../lib/constants';
+import { CATEGORY_CONFIG } from '../lib/constants';
+import { getReportSeverity } from '../lib/reportUtils';
 import { filterBoundariesByZoom } from '../hooks/useCachedData';
 
 // Get Mapbox token from environment variable
@@ -859,9 +860,10 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
       const el = document.createElement('div');
       el.className = 'marker';
 
-      // Get config from constants
-      const severityConfig = SEVERITY_CONFIG[report.severity] || SEVERITY_CONFIG['ringan'];
-      const categoryConfig = CATEGORY_CONFIG[report.category] || CATEGORY_CONFIG['lainnya'];
+      // Get severity dynamically from location damage
+      const severityConfig = getReportSeverity(report);
+      // Get category config from Airtable field "Category"
+      const categoryConfig = CATEGORY_CONFIG[report.category || report.Category] || CATEGORY_CONFIG['default'];
 
       el.style.backgroundColor = severityConfig.markerColor;
       el.style.width = '28px';
