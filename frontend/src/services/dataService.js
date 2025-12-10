@@ -375,13 +375,13 @@ function calculateStatistics(locations) {
 }
 
 function calculateSumatraStatistics(locations) {
-  // Calculate statistics for all Sumatra locations
-  // Filter only Kabupaten/Kota type (not Kecamatan) to avoid double counting
-  const kabupatenLocations = locations.filter(loc =>
-    loc.Type === 'Kabupaten' || loc.Type === 'Kota'
+  // ✅ Calculate statistics from Province level only
+  // Province records already contain aggregated totals from all kabupaten/kota
+  const provinceLocations = locations.filter(loc =>
+    loc.Type === 'Province'
   );
 
-  const stats = calculateStatistics(kabupatenLocations);
+  const stats = calculateStatistics(provinceLocations);
 
   // Add region name and formatting for display
   return {

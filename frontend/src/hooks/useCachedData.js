@@ -575,12 +575,13 @@ export const calculateStatistics = (locations) => {
  * Calculate Sumatra-wide statistics
  */
 export const calculateSumatraStatistics = (locations) => {
-  // Filter only Kabupaten/Kota to avoid double counting
-  const kabupatenLocations = locations.filter(loc =>
-    loc.Type === 'Kabupaten' || loc.Type === 'Kota'
+  // ✅ Filter only Province level - use aggregated province data
+  // Province records already contain totals from all kabupaten/kota below them
+  const provinceLocations = locations.filter(loc =>
+    loc.Type === 'Province'
   );
 
-  const stats = calculateStatistics(kabupatenLocations);
+  const stats = calculateStatistics(provinceLocations);
 
   return {
     ...stats,
