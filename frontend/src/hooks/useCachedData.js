@@ -4,10 +4,60 @@ import { airtableService } from '../services/airtable';
 // Local storage keys
 const CACHE_KEYS = {
   BOUNDARIES: 'kawalBanjir_boundaries',
-  LOCATIONS: 'kawalBanjir_locations',
-  NEWS: 'kawalBanjir_news',
-  REPORTS: 'kawalBanjir_reports',
+  LOCATIONS_MINIMAL: 'kawalBanjir_locations_minimal', // 🔥 NEW: Only essential fields
   TIMESTAMP: 'kawalBanjir_timestamp'
+  // 🔥 REMOVED: NEWS and REPORTS (fetch on-demand instead)
+};
+
+// 🔍 Utility: Calculate size of localStorage items
+const getLocalStorageSize = () => {
+  let totalSize = 0;
+  const sizes = {};
+
+  for (const key in localStorage) {
+    if (localStorage.hasOwnProperty(key)) {
+      const itemSize = ((localStorage[key].length + key.length) * 2); // UTF-16 = 2 bytes per char
+      sizes[key] = {
+        sizeBytes: itemSize,
+        sizeKB: (itemSize / 1024).toFixed(2),
+        sizeMB: (itemSize / 1024 / 1024).toFixed(2)
+      };
+      totalSize += itemSize;
+    }
+  }
+
+  return {
+    items: sizes,
+    totalBytes: totalSize,
+    totalKB: (totalSize / 1024).toFixed(2),
+    totalMB: (totalSize / 1024 / 1024).toFixed(2)
+  };
+};
+
+// 🔍 Utility: Log localStorage usage to console
+const logLocalStorageUsage = () => {
+  const usage = getLocalStorageSize();
+
+  console.group('📊 LOCAL STORAGE USAGE');
+  console.log(`Total Size: ${usage.totalMB} MB (${usage.totalKB} KB)`);
+  console.log('');
+
+  // Sort by size (largest first)
+  const sortedItems = Object.entries(usage.items)
+    .sort((a, b) => b[1].sizeBytes - a[1].sizeBytes);
+
+  console.table(
+    sortedItems.map(([key, size]) => ({
+      'Key': key,
+      'Size (MB)': size.sizeMB,
+      'Size (KB)': size.sizeKB,
+      'Size (Bytes)': size.sizeBytes.toLocaleString()
+    }))
+  );
+
+  console.groupEnd();
+
+  return usage;
 };
 
 /**
@@ -25,9 +75,7 @@ export const useCachedData = () => {
     try {
       return (
         localStorage.getItem(CACHE_KEYS.BOUNDARIES) &&
-        localStorage.getItem(CACHE_KEYS.LOCATIONS) &&
-        localStorage.getItem(CACHE_KEYS.NEWS) &&
-        localStorage.getItem(CACHE_KEYS.REPORTS) &&
+        localStorage.getItem(CACHE_KEYS.LOCATIONS_MINIMAL) &&
         localStorage.getItem(CACHE_KEYS.TIMESTAMP)
       );
     } catch (e) {
@@ -40,14 +88,18 @@ export const useCachedData = () => {
   const loadFromCache = useCallback(() => {
     try {
       const boundaries = JSON.parse(localStorage.getItem(CACHE_KEYS.BOUNDARIES));
-      const locations = JSON.parse(localStorage.getItem(CACHE_KEYS.LOCATIONS));
-      const news = JSON.parse(localStorage.getItem(CACHE_KEYS.NEWS));
-      const reports = JSON.parse(localStorage.getItem(CACHE_KEYS.REPORTS));
+      const locationsMinimal = JSON.parse(localStorage.getItem(CACHE_KEYS.LOCATIONS_MINIMAL));
       const timestamp = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
+
+      // Note: localStorage usage logging disabled for production
 
       // DON'T set state here! This would cause infinite re-renders
       // Just return the data
-      return { boundaries, locations, news, reports, timestamp };
+      return {
+        boundaries,
+        locations: locationsMinimal, // Return as 'locations' for backward compatibility
+        timestamp
+      };
     } catch (e) {
       console.error('Error loading from cache:', e);
       return null;
@@ -59,13 +111,23 @@ export const useCachedData = () => {
     try {
       const timestamp = new Date().toISOString();
 
+      // 🔥 Filter locations to keep only essential fields (80% size reduction!)
+      const locationsMinimal = data.locations.map(loc => ({
+        id: loc.id,
+        'Loc Name': loc['Loc Name'],
+        'BPS Code': loc['BPS Code'],
+        'Type': loc['Type'], // 🔥 IMPORTANT: Needed for joinKerusakanToBoundaries()
+        'Kerusakan': loc['Kerusakan'] || 0 // Total damage count
+      }));
+
+      // Save only boundaries and minimal locations
       localStorage.setItem(CACHE_KEYS.BOUNDARIES, JSON.stringify(data.boundaries));
-      localStorage.setItem(CACHE_KEYS.LOCATIONS, JSON.stringify(data.locations));
-      localStorage.setItem(CACHE_KEYS.NEWS, JSON.stringify(data.news));
-      localStorage.setItem(CACHE_KEYS.REPORTS, JSON.stringify(data.reports));
+      localStorage.setItem(CACHE_KEYS.LOCATIONS_MINIMAL, JSON.stringify(locationsMinimal));
       localStorage.setItem(CACHE_KEYS.TIMESTAMP, timestamp);
 
       setLastUpdated(new Date(timestamp));
+
+      // Note: Storage usage logging disabled for production
 
       return true;
     } catch (e) {
@@ -81,9 +143,21 @@ export const useCachedData = () => {
   // Clear cache
   const clearCache = useCallback(() => {
     try {
+      // Clear current cache keys
       Object.values(CACHE_KEYS).forEach(key => {
         localStorage.removeItem(key);
       });
+
+      // 🧹 Cleanup old cache keys from previous version
+      const oldKeys = [
+        'kawalBanjir_locations',  // Old full locations
+        'kawalBanjir_news',       // Removed (fetch on-demand)
+        'kawalBanjir_reports'     // Removed (fetch on-demand)
+      ];
+      oldKeys.forEach(key => {
+        localStorage.removeItem(key);
+      });
+
       return true;
     } catch (e) {
       console.error('Error clearing cache:', e);
@@ -91,30 +165,25 @@ export const useCachedData = () => {
     }
   }, []);
 
-  // Fetch all data from Airtable (EXCEPT kecamatan)
+  // Fetch essential data for initial load (boundaries + locations minimal)
+  // 🔥 NEWS and REPORTS are fetched on-demand in App.jsx
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Fetch all data in parallel for better performance
-      const [boundaries, locations, news, reports] = await Promise.all([
+      // Fetch only essential data for map display
+      const [boundaries, locations] = await Promise.all([
         // Boundaries - excluding kecamatan (already filtered in airtableService)
         airtableService.getBoundaries(0), // zoom 0 = get all (provinsi + kabupaten)
 
-        // Locations - excluding kecamatan (already filtered in airtableService)
-        airtableService.getLocations(),
-
-        // News/Status Log - all records
-        airtableService.getNews(),
-
-        // Reports - all records
-        airtableService.getReportsInbox()
+        // Locations - we'll filter to minimal fields in saveToCache()
+        airtableService.getLocations()
       ]);
 
-      const data = { boundaries, locations, news, reports };
+      const data = { boundaries, locations };
 
-      // Save to cache
+      // Save to cache (will automatically filter locations to minimal fields)
       const saved = saveToCache(data);
 
       if (saved) {
@@ -142,6 +211,14 @@ export const useCachedData = () => {
   // Initialize - load from cache or fetch if not available
   useEffect(() => {
     const initialize = async () => {
+      // 🧹 Cleanup old cache keys from previous version (one-time migration)
+      const oldKeys = ['kawalBanjir_locations', 'kawalBanjir_news', 'kawalBanjir_reports'];
+      oldKeys.forEach(key => {
+        if (localStorage.getItem(key)) {
+          localStorage.removeItem(key);
+        }
+      });
+
       if (hasCachedData()) {
         const cached = loadFromCache();
         if (cached) {

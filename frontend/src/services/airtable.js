@@ -80,6 +80,32 @@ export const airtableService = {
     }
   },
 
+  // 🔥 NEW: Get location details by BPS Code (for on-demand fetching)
+  // Returns full location data with all statistics fields
+  getLocationByBpsCode: async (bpsCode) => {
+    try {
+      const formula = `{BPS Code} = '${bpsCode}'`;
+      const params = {
+        filterByFormula: formula,
+        maxRecords: 1
+      };
+
+      const records = await getAllRecords(TABLES.LOCATIONS, params);
+
+      if (records.length === 0) {
+        return null;
+      }
+
+      return {
+        id: records[0].id,
+        ...records[0].fields
+      };
+    } catch (error) {
+      console.error(`Error fetching location by BPS Code ${bpsCode}:`, error);
+      throw error;
+    }
+  },
+
   // ===== REPORTS INBOX =====
   getReportsInbox: async (filters = {}) => {
     try {
@@ -607,15 +633,8 @@ export const airtableService = {
         };
         locationsRecords = await getAllRecords(TABLES.LOCATIONS, locationsParams);
 
-        console.log('🔍 DEBUG: ✅ Locations records fetched successfully:', locationsRecords.length);
-        console.log('🔍 DEBUG: First 3 locations:', locationsRecords.slice(0, 3).map(r => ({
-          id: r.id,
-          fields: r.fields
-        })));
-
         // Log available field names from first record
         if (locationsRecords.length > 0) {
-          console.log('🔍 DEBUG: Available field names in Locations:', Object.keys(locationsRecords[0].fields));
         }
       } catch (error) {
         console.error('🔍 DEBUG: ❌❌❌ ERROR fetching Locations ❌❌❌');
@@ -626,12 +645,10 @@ export const airtableService = {
       }
 
       // Log after try-catch to see what we got
-      console.log('🔍 DEBUG: After fetch attempt, locationsRecords.length =', locationsRecords.length);
 
       // Create lookup map: namaWilayah -> kerusakanValue
       // Use normalized names for matching (lowercase, trim spaces)
       const kerusakanMap = {};
-      console.log('🔍 DEBUG: Creating Kerusakan map from', locationsRecords.length, 'records...');
 
       locationsRecords.forEach((record, index) => {
         const fields = record.fields;
@@ -646,8 +663,6 @@ export const airtableService = {
                           fields['Total Damage'] || fields.totalDamage || 0;
 
         if (index < 3) {
-          console.log(`🔍 DEBUG: Record ${index + 1} fields:`, fields);
-          console.log(`🔍 DEBUG: Record ${index + 1} - Name found: "${name}", Kerusakan found: ${kerusakan}`);
         }
 
         if (name) {
@@ -657,15 +672,11 @@ export const airtableService = {
           kerusakanMap[normalizedName] = kerusakanValue;
 
           if (index < 5) {
-            console.log(`🔍 DEBUG: Added to map - "${name}" (normalized: "${normalizedName}") -> Kerusakan: ${kerusakanValue}`);
           }
         } else {
           console.warn(`🔍 DEBUG: ⚠️ Record ${index + 1} has no name field!`);
         }
       });
-
-      console.log('🔍 DEBUG: Kerusakan map created with', Object.keys(kerusakanMap).length, 'entries');
-      console.log('🔍 DEBUG: First 5 entries:', Object.entries(kerusakanMap).slice(0, 5));
 
       // Convert Airtable records to GeoJSON FeatureCollection
       const features = records.map(record => {
@@ -754,13 +765,11 @@ export const airtableService = {
           const normalizedKabupaten = namaKabupaten.toLowerCase().trim();
           kerusakan = kerusakanMap[normalizedKabupaten] || 0;
 
-          console.log(`🔍 DEBUG: Matching kabupaten "${namaKabupaten}" (normalized: "${normalizedKabupaten}") -> Kerusakan: ${kerusakan}`);
         } else if (adminLevel === 'provinsi' && namaProvinsi) {
           // Match provinsi name
           const normalizedProvinsi = namaProvinsi.toLowerCase().trim();
           kerusakan = kerusakanMap[normalizedProvinsi] || 0;
 
-          console.log(`🔍 DEBUG: Matching provinsi "${namaProvinsi}" (normalized: "${normalizedProvinsi}") -> Kerusakan: ${kerusakan}`);
         }
 
         const properties = {
@@ -789,12 +798,6 @@ export const airtableService = {
 
       // 🔍 DEBUG: Log summary of kerusakan values in features
       const featuresWithKerusakan = features.filter(f => f.properties.kerusakan > 0);
-      console.log(`🔍 DEBUG: Total features: ${features.length}, Features with Kerusakan > 0: ${featuresWithKerusakan.length}`);
-      console.log('🔍 DEBUG: Sample features with Kerusakan:', featuresWithKerusakan.slice(0, 5).map(f => ({
-        adminLevel: f.properties.adminLevel,
-        nama: f.properties.namaProvinsi || f.properties.namaKabupaten,
-        kerusakan: f.properties.kerusakan
-      })));
 
       // Helper function: Check if coordinates are within Sumatra bounds
       const isWithinSumatraBounds = (geometry) => {

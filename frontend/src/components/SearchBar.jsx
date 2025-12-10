@@ -32,7 +32,7 @@ export default function SearchBar({ onSearch }) {
           onBlur={() => setIsFocused(false)}
           placeholder="Cari lokasi, deskripsi, atau kategori..."
           className={`
-            w-full pl-11 pr-12 py-3.5
+            w-full pl-5 pr-10 py-3.5
             rounded-xl border-2
             bg-white/95 backdrop-blur-sm
             text-gray-900 placeholder-gray-500

@@ -16,6 +16,7 @@ import {
   searchWithLocations,
   joinKerusakanToBoundaries  // 🔥 NEW: Import join function
 } from './hooks/useCachedData';
+import { airtableService } from './services/airtable'; // 🔥 NEW: Import for on-demand fetching
 
 // Lazy load Map component to reduce initial bundle size
 const Map = lazy(() => import('./components/Map'));
@@ -53,65 +54,56 @@ function App() {
   // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Fetch functions - using cached data (client-side filtering)
-  const fetchReports = useCallback((regionData = null) => {
+  // 🔥 NEW: Fetch reports on-demand from Airtable (not from cache)
+  const fetchReports = useCallback(async (regionData = null) => {
     try {
       setLoading(true);
+      setError(null);
 
-      // Load from cache
-      const cached = loadFromCache();
-      if (!cached || !cached.reports) {
-        setError('Cache belum siap. Silakan refresh halaman.');
-        setLoading(false);
-        return;
-      }
+      // Fetch fresh data from Airtable
+      const allReports = await airtableService.getReportsInbox();
 
-      // Filter reports by region (client-side)
-      const filteredData = filterReportsByLocation(cached.reports, regionData);
+      // Filter by region if needed (client-side)
+      const filteredData = filterReportsByLocation(allReports, regionData);
 
       setReports(filteredData);
       setFilteredReports(filteredData);
-      setError(null);
     } catch (err) {
-      console.error('Error loading reports:', err);
+      console.error('Error fetching reports:', err);
       setError('Gagal memuat data laporan.');
     } finally {
       setLoading(false);
     }
-  }, [loadFromCache]);
+  }, []);
 
-  const fetchStatistics = useCallback((regionData) => {
+  // 🔥 NEW: Fetch full locations data on-demand for statistics calculation
+  const fetchStatistics = useCallback(async (regionData) => {
     try {
       setStatsLoading(true);
       setStatsError(null);
 
-      // Load from cache
-      const cached = loadFromCache();
-      if (!cached || !cached.locations) {
-        setStatsError('Cache belum siap. Silakan refresh halaman.');
-        setStatsLoading(false);
-        return;
-      }
+      // Fetch full locations data from Airtable (with all detail fields)
+      const fullLocations = await airtableService.getLocations();
 
       let data;
 
       // Calculate statistics (client-side)
       if (!regionData) {
         // Sumatra-wide statistics
-        data = calculateSumatraStatistics(cached.locations);
+        data = calculateSumatraStatistics(fullLocations);
       } else {
         // Statistics based on admin level
         if (regionData.adminLevel === 'provinsi') {
           data = calculateStatisticsByProvinsi(
-            cached.locations,
+            fullLocations,
             regionData.kodeProvinsi,
             regionData.namaProvinsi
           );
         } else if (regionData.adminLevel === 'kabupaten') {
-          data = calculateStatisticsByKabupaten(cached.locations, regionData.namaKabupaten);
+          data = calculateStatisticsByKabupaten(fullLocations, regionData.namaKabupaten);
         } else if (regionData.adminLevel === 'kecamatan') {
           // For kecamatan: get kabupaten data (kecamatan level not stored)
-          data = calculateStatisticsByKabupaten(cached.locations, regionData.namaKabupaten);
+          data = calculateStatisticsByKabupaten(fullLocations, regionData.namaKabupaten);
         }
       }
 
@@ -119,37 +111,33 @@ function App() {
         setStatistics(data);
       }
     } catch (err) {
-      console.error('Error calculating statistics:', err);
+      console.error('Error fetching and calculating statistics:', err);
       setStatsError(regionData ? 'Gagal memuat statistik untuk wilayah ini.' : 'Gagal memuat statistik.');
     } finally {
       setStatsLoading(false);
     }
-  }, [loadFromCache]);
+  }, []);
 
-  const fetchNews = useCallback((locationName, locationCode = null) => {
+  // 🔥 NEW: Fetch news on-demand from Airtable (not from cache)
+  const fetchNews = useCallback(async (locationName, locationCode = null) => {
     try {
       setNewsLoading(true);
       setNewsError(null);
 
-      // Load from cache
-      const cached = loadFromCache();
-      if (!cached || !cached.news) {
-        setNewsError('Cache belum siap. Silakan refresh halaman.');
-        setNewsLoading(false);
-        return;
-      }
+      // Fetch fresh data from Airtable
+      const allNews = await airtableService.getNews();
 
       // Filter news by location (client-side)
-      const filteredNews = filterNewsByLocation(cached.news, locationName || 'Sumatra', locationCode);
+      const filteredNews = filterNewsByLocation(allNews, locationName || 'Sumatra', locationCode);
       setNews(filteredNews);
       setSelectedLocationName(locationName || 'Sumatra');
     } catch (err) {
-      console.error('Error loading news:', err);
+      console.error('Error fetching news:', err);
       setNewsError('Gagal memuat berita untuk wilayah ini.');
     } finally {
       setNewsLoading(false);
     }
-  }, [loadFromCache]);
+  }, []);
 
   // Initialize data from cache when ready
   useEffect(() => {

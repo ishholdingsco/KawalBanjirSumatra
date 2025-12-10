@@ -28,9 +28,9 @@ export default function StatisticsPanel({ statistics, loading, error, onRefresh,
             <div className="h-7 md:h-8 bg-yellow-300/60 rounded w-12 md:w-16 mb-0.5 md:mb-1"></div>
             <div className="h-3 md:h-4 bg-yellow-200/60 rounded w-full"></div>
           </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-2 md:p-3 border border-purple-200">
-            <div className="h-7 md:h-8 bg-purple-300/60 rounded w-14 md:w-20 mb-0.5 md:mb-1"></div>
-            <div className="h-3 md:h-4 bg-purple-200/60 rounded w-full"></div>
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-2 md:p-3 border border-orange-200">
+            <div className="h-7 md:h-8 bg-orange-300/60 rounded w-14 md:w-20 mb-0.5 md:mb-1"></div>
+            <div className="h-3 md:h-4 bg-orange-200/60 rounded w-full"></div>
           </div>
         </div>
 
@@ -145,9 +145,9 @@ export default function StatisticsPanel({ statistics, loading, error, onRefresh,
           <div className="text-lg md:text-2xl font-bold text-yellow-700">{formatCompactNumber(totalHilang)}</div>
           <div className="text-[10px] md:text-xs text-yellow-600 font-medium mt-0.5 md:mt-1">Hilang</div>
         </div>
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-2 md:p-3 border border-purple-200">
-          <div className="text-lg md:text-2xl font-bold text-purple-700">{formatCompactNumber(totalMengungsi)}</div>
-          <div className="text-[10px] md:text-xs text-purple-600 font-medium mt-0.5 md:mt-1">Mengungsi</div>
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-2 md:p-3 border border-orange-200">
+          <div className="text-lg md:text-2xl font-bold text-orange-700">{formatCompactNumber(totalKerusakan)}</div>
+          <div className="text-[10px] md:text-xs text-orange-600 font-medium mt-0.5 md:mt-1">Kerusakan</div>
         </div>
       </div>
 
