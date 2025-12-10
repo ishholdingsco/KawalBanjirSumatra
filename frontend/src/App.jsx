@@ -46,10 +46,14 @@ function App() {
 
   // News state
   const [news, setNews] = useState([]);
+  const [allNews, setAllNews] = useState([]); // 🔥 NEW: Store all news for search functionality
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError] = useState(null);
   const [selectedNews, setSelectedNews] = useState(null);
   const [selectedLocationName, setSelectedLocationName] = useState('Sumatra');
+
+  // Sidebar tab state - lifted up from Sidebar component to control from App
+  const [activeTab, setActiveTab] = useState('berita');
 
   // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -126,10 +130,13 @@ function App() {
       setNewsError(null);
 
       // Fetch fresh data from Airtable
-      const allNews = await airtableService.getNews();
+      const fetchedAllNews = await airtableService.getNews();
+
+      // 🔥 IMPORTANT: Store ALL news for search functionality
+      setAllNews(fetchedAllNews);
 
       // Filter news by location (client-side)
-      const filteredNews = filterNewsByLocation(allNews, locationName || 'Sumatra', locationCode);
+      const filteredNews = filterNewsByLocation(fetchedAllNews, locationName || 'Sumatra', locationCode);
       setNews(filteredNews);
       setSelectedLocationName(locationName || 'Sumatra');
     } catch (err) {
@@ -245,6 +252,9 @@ function App() {
       // Reset to Sumatra view
       setSelectedRegion(null);
       setShowStatistics(true);
+      // 🔥 FIX: Reset selected news/report detail to show list view
+      setSelectedNews(null);
+      setSelectedReport(null);
       fetchStatistics(null);
       fetchNews('Sumatra');
       return;
@@ -302,7 +312,8 @@ function App() {
 
       // Filter news by query (with bilingual support)
       // Match against: ALL fields (headline, details, category, locationName, eventTime, sourceLink, etc)
-      const filteredNewsResult = (cached.news || []).filter(newsItem => {
+      // 🔥 FIX: Filter from 'allNews' (all fetched news) not 'news' (already filtered by location)
+      const filteredNewsResult = allNews.filter(newsItem => {
         const headline = (newsItem.headline || newsItem.Headline || '').toLowerCase();
         const details = (newsItem.details || newsItem.Details || '').toLowerCase();
         const category = (newsItem.category || newsItem.Category || '').toLowerCase();
@@ -329,6 +340,24 @@ function App() {
 
       // Reset region selection (no connection to boundaries)
       setSelectedRegion(null);
+
+      // 🔥 FIX: Reset selected news/report detail to show list view
+      setSelectedNews(null);
+      setSelectedReport(null);
+
+      // 🔥 FIX: Smart tab switching based on search results
+      // Priority: Show tab with results
+      // - If has news results → 'berita' tab
+      // - If has reports results (and no news) → 'laporan' tab
+      // - If both have results → 'berita' tab (default priority)
+      if (filteredNewsResult.length > 0) {
+        setActiveTab('berita');
+      } else if (filteredReportsResult.length > 0) {
+        setActiveTab('laporan');
+      } else {
+        // No results in both → default to 'berita'
+        setActiveTab('berita');
+      }
 
       // Open sidebar to show filtered results
       setSidebarOpen(true);
@@ -527,6 +556,8 @@ function App() {
               onNewsClick={handleNewsClick}
               locationName={selectedLocationName}
               onClose={() => setSidebarOpen(false)}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
             />
           </div>
         )}

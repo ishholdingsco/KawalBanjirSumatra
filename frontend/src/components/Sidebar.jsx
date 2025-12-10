@@ -21,10 +21,12 @@ export default function Sidebar({
   selectedNews,
   onNewsClick,
   locationName,
-  onClose
+  onClose,
+  activeTab = 'berita',  // 🔥 NEW: Receive from parent (App.jsx)
+  onTabChange  // 🔥 NEW: Callback to change tab from parent
 }) {
-  // Tab state - default to 'berita'
-  const [activeTab, setActiveTab] = useState('berita');
+  // 🔥 REMOVED: Tab state moved to App.jsx for better control
+  // const [activeTab, setActiveTab] = useState('berita');
 
   // View mode state - 'list' or 'detail'
   const [viewMode, setViewMode] = useState('list');
@@ -61,6 +63,15 @@ export default function Sidebar({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportsLoading]);
+
+  // 🔥 FIX: Reset viewMode ke 'list' ketika selectedNews/selectedReport di-clear (null)
+  // Ini penting untuk case search: ketika search dilakukan, App.jsx set selectedNews = null
+  // tapi viewMode masih 'detail', jadi sidebar stuck di detail view kosong
+  useEffect(() => {
+    if (selectedNews === null && selectedReport === null) {
+      setViewMode('list');
+    }
+  }, [selectedNews, selectedReport]);
 
   // Reset pagination ketika news berubah (misal ganti lokasi)
   useEffect(() => {
@@ -176,7 +187,7 @@ export default function Sidebar({
           <>
             <div className="flex gap-2 mb-3">
               <button
-                onClick={() => setActiveTab('laporan')}
+                onClick={() => onTabChange?.('laporan')}
                 className={cn(
                   "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm",
                   ANIMATIONS.transition,
@@ -189,7 +200,7 @@ export default function Sidebar({
                 <span>Laporan</span>
               </button>
               <button
-                onClick={() => setActiveTab('berita')}
+                onClick={() => onTabChange?.('berita')}
                 className={cn(
                   "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm",
                   ANIMATIONS.transition,
