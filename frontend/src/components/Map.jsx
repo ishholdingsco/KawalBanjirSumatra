@@ -18,7 +18,13 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapReady, setMapReady] = useState(false); // Track when map is truly ready (after labels hidden)
   const [currentZoom, setCurrentZoom] = useState(5);
+  const [zoomCategory, setZoomCategory] = useState('provinsi'); // Track zoom category (provinsi vs kabupaten)
   const isLoadingBoundaries = useRef(false);
+
+  // Helper: Get zoom category (provinsi: 4-6, kabupaten: 7+)
+  const getZoomCategory = (zoom) => {
+    return zoom >= 7 ? 'kabupaten' : 'provinsi';
+  };
 
   // Initialize map
   useEffect(() => {
@@ -46,38 +52,43 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
     });
 
     // Batasi panning ke area Sumatra (pengganti maxBounds yang lebih flexible)
+    // ✅ OPTIMIZED: Add debounce to prevent excessive checks during drag
+    let moveendTimeout;
     map.current.on('moveend', () => {
-      const center = map.current.getCenter();
-      const bounds = {
-        west: 94.5,
-        south: -6.0,
-        east: 106.5,
-        north: 6.5
-      };
+      clearTimeout(moveendTimeout);
+      moveendTimeout = setTimeout(() => {
+        const center = map.current.getCenter();
+        const bounds = {
+          west: 94.5,
+          south: -6.0,
+          east: 106.5,
+          north: 6.5
+        };
 
-      // Jika center keluar dari bounds, kembalikan ke dalam bounds
-      let newCenter = { lng: center.lng, lat: center.lat };
-      let needsAdjustment = false;
+        // Jika center keluar dari bounds, kembalikan ke dalam bounds
+        let newCenter = { lng: center.lng, lat: center.lat };
+        let needsAdjustment = false;
 
-      if (center.lng < bounds.west) {
-        newCenter.lng = bounds.west;
-        needsAdjustment = true;
-      } else if (center.lng > bounds.east) {
-        newCenter.lng = bounds.east;
-        needsAdjustment = true;
-      }
+        if (center.lng < bounds.west) {
+          newCenter.lng = bounds.west;
+          needsAdjustment = true;
+        } else if (center.lng > bounds.east) {
+          newCenter.lng = bounds.east;
+          needsAdjustment = true;
+        }
 
-      if (center.lat < bounds.south) {
-        newCenter.lat = bounds.south;
-        needsAdjustment = true;
-      } else if (center.lat > bounds.north) {
-        newCenter.lat = bounds.north;
-        needsAdjustment = true;
-      }
+        if (center.lat < bounds.south) {
+          newCenter.lat = bounds.south;
+          needsAdjustment = true;
+        } else if (center.lat > bounds.north) {
+          newCenter.lat = bounds.north;
+          needsAdjustment = true;
+        }
 
-      if (needsAdjustment) {
-        map.current.panTo(newCenter, { duration: 300 });
-      }
+        if (needsAdjustment) {
+          map.current.panTo(newCenter, { duration: 300 });
+        }
+      }, 150); // Debounce 150ms - balance between responsiveness and performance
     });
 
     // Enforce minZoom constraint during scroll (fix scroll zoom stopping issue)
@@ -637,18 +648,30 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
       });
 
       // Track zoom changes for dynamic LOD with debouncing
+      // ✅ OPTIMIZED: Only update when zoom CATEGORY changes (4-6 vs 7+)
       let zoomTimeout;
       map.current.on('zoom', () => {
         clearTimeout(zoomTimeout);
         zoomTimeout = setTimeout(() => {
           const zoom = Math.round(map.current.getZoom());
-          setCurrentZoom(zoom);
+          const newCategory = getZoomCategory(zoom);
+
+          // Only update if category changed (provinsi ↔ kabupaten)
+          setZoomCategory(prevCategory => {
+            if (prevCategory !== newCategory) {
+              setCurrentZoom(zoom);
+              return newCategory;
+            }
+            return prevCategory;
+          });
         }, 300); // Debounce 300ms untuk menghindari reload terlalu sering
       });
 
       // Initial load
       setMapLoaded(true);
-      setCurrentZoom(Math.round(map.current.getZoom()));
+      const initialZoom = Math.round(map.current.getZoom());
+      setCurrentZoom(initialZoom);
+      setZoomCategory(getZoomCategory(initialZoom));
 
       // Notify parent AFTER map is fully loaded and all labels are hidden
       // Add a small delay to ensure browser has applied all style changes
@@ -767,6 +790,7 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
 
   // Load boundaries dynamically based on zoom level with smooth transition
   // NOW USING CACHED DATA - no Airtable fetch!
+  // ✅ OPTIMIZED: Only re-render when zoom CATEGORY changes (provinsi ↔ kabupaten)
   useEffect(() => {
     if (!mapLoaded || !map.current || !cachedBoundaries) return;
 
@@ -792,6 +816,7 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
         await new Promise(resolve => setTimeout(resolve, 300));
 
         // Filter boundaries by zoom (CLIENT-SIDE from cache)
+        // Use currentZoom for filtering (still need exact zoom value)
         const filteredBoundaries = filterBoundariesByZoom(cachedBoundaries, currentZoom);
 
         if (filteredBoundaries) {
@@ -838,14 +863,22 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
     };
 
     loadBoundaries();
-  }, [currentZoom, mapLoaded, cachedBoundaries]);
+  }, [zoomCategory, currentZoom, mapLoaded, cachedBoundaries]); // Trigger only on category change
 
   // Update markers when reports change
+  // ✅ OPTIMIZED: Proper cleanup of event listeners to prevent memory leaks
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
 
-    // Clear existing markers
-    markers.current.forEach(marker => marker.remove());
+    // Clear existing markers with proper cleanup
+    markers.current.forEach(markerData => {
+      // Remove event listeners
+      if (markerData.cleanup) {
+        markerData.cleanup();
+      }
+      // Remove marker from map
+      markerData.marker.remove();
+    });
     markers.current = [];
 
     // Add new markers
@@ -874,15 +907,25 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
       el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
       el.style.transition = 'transform 0.2s ease, box-shadow 0.2s ease';
 
-      // Hover effects
-      el.addEventListener('mouseenter', () => {
+      // Define event handlers to enable cleanup
+      const handleMouseEnter = () => {
         el.style.transform = 'scale(1.2)';
         el.style.boxShadow = '0 6px 16px rgba(0,0,0,0.4)';
-      });
-      el.addEventListener('mouseleave', () => {
+      };
+      const handleMouseLeave = () => {
         el.style.transform = 'scale(1)';
         el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-      });
+      };
+      const handleClick = () => {
+        if (onMarkerClick) {
+          onMarkerClick(report);
+        }
+      };
+
+      // Attach event listeners
+      el.addEventListener('mouseenter', handleMouseEnter);
+      el.addEventListener('mouseleave', handleMouseLeave);
+      el.addEventListener('click', handleClick);
 
       const marker = new mapboxgl.Marker(el)
         .setLngLat(report.location.coordinates)
@@ -905,13 +948,15 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
         )
         .addTo(map.current);
 
-      el.addEventListener('click', () => {
-        if (onMarkerClick) {
-          onMarkerClick(report);
+      // Store marker with cleanup function
+      markers.current.push({
+        marker,
+        cleanup: () => {
+          el.removeEventListener('mouseenter', handleMouseEnter);
+          el.removeEventListener('mouseleave', handleMouseLeave);
+          el.removeEventListener('click', handleClick);
         }
       });
-
-      markers.current.push(marker);
     });
 
     // Fit map to markers if there are any, but stay within Sumatra bounds
@@ -951,6 +996,17 @@ const Map = forwardRef(({ reports, onMarkerClick, onMapLoaded, onRegionClick, ca
         });
       }
     }
+
+    // Cleanup on unmount
+    return () => {
+      markers.current.forEach(markerData => {
+        if (markerData.cleanup) {
+          markerData.cleanup();
+        }
+        markerData.marker.remove();
+      });
+      markers.current = [];
+    };
   }, [reports, mapLoaded, onMarkerClick]);
 
   // Expose flyToRegion method to parent via ref
