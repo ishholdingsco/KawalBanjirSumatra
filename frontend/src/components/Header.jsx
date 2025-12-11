@@ -1,7 +1,7 @@
 import SearchBar from './SearchBar';
 import { Z_INDEX } from '../lib/constants';
 
-export default function Header({ onSearch }) {
+export default function Header({ onSearch, onLogoClick }) {
   return (
     <header
       className="text-gray-800 shadow-lg flex-shrink-0 backdrop-blur-sm"
@@ -14,7 +14,9 @@ export default function Header({ onSearch }) {
             <img
               src="/logo-mobile.png"
               alt="Kawal Banjir Sumatra"
-              className="h-16 w-auto"
+              className="h-16 w-auto cursor-pointer hover:scale-105 transition-transform"
+              onClick={onLogoClick}
+              title="Kawal Banjir Sumatra"
             />
           </div>
           <SearchBar onSearch={onSearch} />
@@ -26,7 +28,9 @@ export default function Header({ onSearch }) {
             <img
               src="/logo.png"
               alt="Kawal Banjir Sumatra"
-              className="h-12 md:h-14 lg:h-16 w-auto"
+              className="h-12 md:h-14 lg:h-16 w-auto cursor-pointer hover:scale-105 transition-transform"
+              onClick={onLogoClick}
+              title="Kawal Banjir Sumatra"
             />
           </div>
           <div className="flex-1 min-w-0">

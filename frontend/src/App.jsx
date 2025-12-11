@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { Plus, Info, RefreshCw } from 'lucide-react';
+import { Plus, Info, RefreshCw, Phone } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import StatisticsPanel from './components/StatisticsPanel';
+import ContactPage from './components/ContactPage';
 import { Button } from './components/ui/button';
 import { Z_INDEX, ANIMATIONS } from './lib/constants';
 import {
@@ -33,8 +34,8 @@ function App() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // Open by default on desktop (>= 768px), closed on mobile
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
+  // Open by default on desktop (>= 1024px), closed on mobile and tablet
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   // Statistics state
@@ -57,6 +58,9 @@ function App() {
 
   // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Contact page state
+  const [showContactPage, setShowContactPage] = useState(false);
 
   // 🔥 NEW: Fetch reports on-demand from Airtable (not from cache)
   const fetchReports = useCallback(async (regionData = null) => {
@@ -173,8 +177,8 @@ function App() {
     setSelectedRegion(regionData);
     setShowStatistics(true);
 
-    // Only auto-open sidebar on desktop (>= 768px), not on mobile
-    if (window.innerWidth >= 768) {
+    // Only auto-open sidebar on desktop (>= 1024px), not on mobile/tablet
+    if (window.innerWidth >= 1024) {
       setSidebarOpen(true);
     }
 
@@ -387,6 +391,7 @@ function App() {
       {/* Header */}
       <Header
         onSearch={handleSearch}
+        onLogoClick={() => setShowContactPage(true)}
       />
 
       {/* Main Content */}
@@ -509,6 +514,18 @@ function App() {
               >
                 <RefreshCw className={`h-5 w-5 text-gray-700 mx-auto ${isRefreshing ? 'animate-spin' : ''}`} />
               </button>
+
+              {/* Contact Button - below Refresh button */}
+              <button
+                type="button"
+                onClick={() => setShowContactPage(true)}
+                className="mapboxgl-ctrl mapboxgl-ctrl-group mapboxgl-ctrl-icon absolute top-[195px] right-[10px]"
+                style={{ zIndex: Z_INDEX.overlay }}
+                title="Hubungi Kami"
+                aria-label="Hubungi Kami"
+              >
+                <Phone className="h-5 w-5 text-gray-700 mx-auto" />
+              </button>
             </>
           )}
 
@@ -582,6 +599,11 @@ function App() {
       )}
 
       {/* No overlay backdrop - let users see the map while sidebar is open */}
+
+      {/* Contact Page - Full screen overlay */}
+      {showContactPage && (
+        <ContactPage onClose={() => setShowContactPage(false)} />
+      )}
     </div>
   );
 }

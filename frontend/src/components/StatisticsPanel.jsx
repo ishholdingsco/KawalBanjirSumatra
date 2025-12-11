@@ -110,7 +110,7 @@ export default function StatisticsPanel({ statistics, loading, error, onRefresh,
             {statistics.regionName || 'Data Banjir Sumatra'}
           </h2>
           {statistics.lastSync && new Date(statistics.lastSync).getTime() > 0 && (
-            <p className="text-xs text-gray-500 mt-0.5 hidden md:block">
+            <p className="text-[10px] md:text-xs text-gray-500 mt-0.5">
               Update: {new Date(statistics.lastSync).toLocaleDateString('id-ID', {
                 day: 'numeric',
                 month: 'long',
