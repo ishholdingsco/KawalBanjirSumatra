@@ -160,7 +160,7 @@ export default function ReportDetail({ report, onBack }) {
                       </p>
                     </div>
                     <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-blue-500 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-5 w-5 text-blue-500 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-label="Lihat foto">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </div>

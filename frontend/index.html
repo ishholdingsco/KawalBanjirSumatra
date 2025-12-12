@@ -5,7 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
      <link rel="alternate icon" type="image/png" href="/logo-mobile.png" />
     <!-- <link rel="icon" type="image/png" href="/favicon.png" /> -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://kawalbanjirsumatra.site/" />
 
     <!-- Primary Meta Tags -->
     <title>Kawal Banjir Sumatra</title>
@@ -17,17 +20,31 @@
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://ishholdingsco.github.io/KawalBanjirSumatra/" />
+    <meta property="og:url" content="https://kawalbanjirsumatra.site/" />
     <meta property="og:title" content="Kawal Banjir Sumatra - Sistem Pemantauan & Pelaporan Bencana Banjir Real-time" />
     <meta property="og:description" content="Platform interaktif untuk memantau, melaporkan, dan mendapatkan informasi terkini tentang bencana banjir di wilayah Sumatra. Akses peta real-time dan data tingkat keparahan banjir." />
-    <meta property="og:image" content="https://ishholdingsco.github.io/KawalBanjirSumatra/og-image.png" />
+    <meta property="og:image" content="https://kawalbanjirsumatra.site/logo.png" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:site_name" content="Kawal Banjir Sumatra" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
-    <meta property="twitter:url" content="https://ishholdingsco.github.io/KawalBanjirSumatra/" />
+    <meta property="twitter:url" content="https://kawalbanjirsumatra.site/" />
     <meta property="twitter:title" content="Kawal Banjir Sumatra - Sistem Pemantauan & Pelaporan Bencana Banjir Real-time" />
     <meta property="twitter:description" content="Platform interaktif untuk memantau, melaporkan, dan mendapatkan informasi terkini tentang bencana banjir di wilayah Sumatra." />
-    <meta property="twitter:image" content="https://ishholdingsco.github.io/KawalBanjirSumatra/og-image.png" />
+    <meta property="twitter:image" content="https://kawalbanjirsumatra.site/logo.png" />
+
+    <!-- Mobile Optimization -->
+    <meta name="theme-color" content="#1e40af" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Kawal Banjir" />
+    <link rel="apple-touch-icon" href="/logo-mobile.png" />
+
+    <!-- Additional SEO -->
+    <meta name="language" content="Indonesian" />
+    <meta name="geo.region" content="ID" />
+    <meta name="geo.placename" content="Sumatra, Indonesia" />
 
     <!-- Google Fonts - Plus Jakarta Sans & Bebas Neue -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -38,6 +55,59 @@
     <link rel="preconnect" href="https://api.mapbox.com" />
     <link rel="preconnect" href="https://events.mapbox.com" />
     <link rel="dns-prefetch" href="https://api.mapbox.com" />
+
+    <!-- Structured Data (JSON-LD) for SEO -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Kawal Banjir Sumatra",
+      "url": "https://kawalbanjirsumatra.site/",
+      "description": "Platform interaktif untuk memantau, melaporkan, dan mendapatkan informasi terkini tentang bencana banjir di wilayah Sumatra",
+      "inLanguage": "id",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://kawalbanjirsumatra.site/?s={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Kawal Banjir Sumatra",
+      "url": "https://kawalbanjirsumatra.site/",
+      "logo": "https://kawalbanjirsumatra.site/logo.png",
+      "description": "Sistem pemantauan dan pelaporan bencana banjir real-time untuk wilayah Sumatra",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "Customer Service",
+        "areaServed": "ID",
+        "availableLanguage": "Indonesian"
+      },
+      "areaServed": {
+        "@type": "Place",
+        "name": "Sumatra, Indonesia"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Kawal Banjir Sumatra",
+      "url": "https://kawalbanjirsumatra.site/",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "All",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "IDR"
+      },
+      "description": "Aplikasi web untuk pemantauan dan pelaporan bencana banjir di Sumatra dengan peta interaktif dan data real-time"
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>

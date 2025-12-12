@@ -1,0 +1,37 @@
+# Robots.txt untuk Kawal Banjir Sumatra
+# https://kawalbanjirsumatra.site/
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://kawalbanjirsumatra.site/sitemap.xml
+
+# Allow all major search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+# Disallow crawling of certain files
+User-agent: *
+Disallow: /src/
+Disallow: /node_modules/
+Disallow: /*.json$
+Disallow: /sw.js
+
+# Crawl-delay for polite crawling
+Crawl-delay: 1
