@@ -316,7 +316,9 @@ function calculateStatistics(locations) {
     totalKorbanMeninggal: 0,
     totalKorbanHilang: 0,
     totalKorbanLukaSakit: 0,
-    totalPengungsi: 0,
+    totalMenderita: 0,
+    totalMengungsi: 0,
+    totalKerusakan: 0,
 
     // Rumah (if these fields exist)
     totalRumahRusakBerat: 0,
@@ -338,12 +340,13 @@ function calculateStatistics(locations) {
 
   locations.forEach(loc => {
     // Sum BNPB fields
-    // Field names: Meninggal, Hilang, Luka_Sakit, Menderita, Mengungsi, Menderita_Mengungsi
-    // Displaced fields use space: "Final Displaced", "Manual Displaced", "Child Displaced"
+    // Field names: Meninggal, Hilang, Luka_Sakit, Menderita, Mengungsi
     stats.totalKorbanMeninggal += loc.Meninggal || 0;
     stats.totalKorbanHilang += loc.Hilang || 0;
     stats.totalKorbanLukaSakit += loc.Luka_Sakit || 0;
-    stats.totalPengungsi += loc['Final Displaced'] || loc.Menderita_Mengungsi || loc.Mengungsi || 0;
+    stats.totalMenderita += loc.Menderita || 0;
+    stats.totalMengungsi += loc.Mengungsi || 0;
+    stats.totalKerusakan += loc.Kerusakan || 0;
 
     // Rumah (if fields exist)
     stats.totalRumahRusakBerat += loc.Rumah_Rusak_Berat || 0;

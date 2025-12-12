@@ -379,19 +379,52 @@ export const filterNewsByLocation = (allNews, locationName, locationCode = null)
       .trim();
   };
 
-  // Helper: normalize BPS code
+  // Helper: normalize BPS code (remove dots)
   const normalizeCode = (code) => {
     if (!code) return null;
     return String(code).replace(/\./g, '').replace(/^0+$/, '00');
   };
 
-  // Helper: extract kabupaten code
+  // Helper: extract provinsi code from BPS code
+  // "12" → "12", "1203" → "12", "12.03" → "12", "12.03.29" → "12"
+  const extractProvinsiCode = (bpsCode) => {
+    if (!bpsCode) return null;
+    const normalized = normalizeCode(bpsCode);
+
+    // Take first 2 digits as provinsi code
+    return normalized.substring(0, 2);
+  };
+
+  // Helper: extract kabupaten code from BPS code (remove dots)
+  // "120329" → "1203", "1203" → "1203", "12.03.29" → "1203", "12.03" → "1203"
   const extractKabupatenCode = (bpsCode) => {
     if (!bpsCode) return null;
-    const parts = String(bpsCode).split('.');
-    if (parts.length >= 3) return parts.slice(0, 2).join('');
-    if (parts.length === 2) return parts.join('');
-    return normalizeCode(bpsCode);
+    const normalized = normalizeCode(bpsCode);
+
+    // If length >= 4, take first 4 digits as kabupaten code
+    if (normalized.length >= 4) {
+      return normalized.substring(0, 4);
+    }
+
+    // If length < 4 (provinsi only), return as-is
+    return normalized;
+  };
+
+  // Helper: get admin level from BPS code
+  // Support both formats: with dots ("12.03") and without ("1203")
+  // "12" or "11" → "provinsi"
+  // "1203" or "12.03" → "kabupaten"
+  // "120329" or "12.03.29" → "kecamatan"
+  const getAdminLevel = (bpsCode) => {
+    if (!bpsCode) return null;
+
+    // Normalize to remove dots for consistent length checking
+    const normalized = normalizeCode(bpsCode);
+    const length = normalized.length;
+
+    if (length >= 6) return 'kecamatan';  // 6 digits: "110818" or "11.08.18"
+    if (length >= 4) return 'kabupaten';  // 4 digits: "1108" or "11.08"
+    return 'provinsi';                    // 2 digits: "11" or "12"
   };
 
   // Default view - Indonesia or Sumatra
@@ -407,9 +440,13 @@ export const filterNewsByLocation = (allNews, locationName, locationCode = null)
     });
   }
 
+  // Determine search admin level from locationCode (only provinsi or kabupaten can be clicked)
+  const searchAdminLevel = locationCode ? getAdminLevel(locationCode) : null;
+  const searchProvinsiCode = locationCode ? extractProvinsiCode(locationCode) : null;
+  const searchKabupatenCode = locationCode ? extractKabupatenCode(locationCode) : null;
+
   // Filter by location
   const normalizedLocation = normalize(locationName);
-  const normalizedSearchCode = locationCode ? normalizeCode(locationCode) : null;
 
   return allNews.filter(news => {
     const newsLocation = normalize(news.locationName || '');
@@ -425,24 +462,63 @@ export const filterNewsByLocation = (allNews, locationName, locationCode = null)
       return false;
     }
 
-    // Match by name
+    // Match by name - but validate hierarchy to avoid false positives
+    // IMPORTANT: Don't match parent provinsi when child kabupaten is selected
+    // Example: "Aceh Utara" (kabupaten) should NOT match "Aceh" (provinsi)
     const nameMatch = newsLocation === normalizedLocation ||
       newsLocation.includes(normalizedLocation) ||
       normalizedLocation.includes(newsLocation);
 
-    if (nameMatch) return true;
+    if (nameMatch) {
+      // If we have locationCode, validate that this is not a provinsi parent
+      if (locationCode && news.locationCode) {
+        const newsAdminLevel = getAdminLevel(news.locationCode);
+
+        // When kabupaten is selected, reject provinsi-level news matched by name
+        // This prevents "Aceh" (provinsi) from matching "Aceh Utara" (kabupaten)
+        if (searchAdminLevel === 'kabupaten' && newsAdminLevel === 'provinsi') {
+          // Check if this is actually a parent provinsi match
+          const newsProvinsiCode = extractProvinsiCode(news.locationCode);
+          const searchProvinsiCode = extractProvinsiCode(locationCode);
+
+          // If the provinsi codes match, this is the parent provinsi - SKIP it
+          if (newsProvinsiCode === searchProvinsiCode) {
+            return false;
+          }
+        }
+        // If hierarchy is valid, accept the name match
+        return true;
+      } else {
+        // No locationCode to validate - accept name match
+        return true;
+      }
+    }
 
     // Match by BPS code hierarchy
-    if (normalizedSearchCode && news.locationCode) {
-      const newsKabCode = extractKabupatenCode(news.locationCode);
-      if (newsKabCode && newsKabCode === normalizedSearchCode) {
-        return true;
+    if (!news.locationCode) return false;
+
+    const newsAdminLevel = getAdminLevel(news.locationCode);
+    const newsProvinsiCode = extractProvinsiCode(news.locationCode);
+    const newsKabupatenCode = extractKabupatenCode(news.locationCode);
+
+    // 🔥 HIERARCHICAL MATCHING (only provinsi and kabupaten can be clicked)
+    // When user clicks PROVINSI → show provinsi + all kabupaten + all kecamatan in that provinsi
+    if (searchAdminLevel === 'provinsi' && searchProvinsiCode) {
+      // Match any news in the same provinsi (provinsi, kabupaten, or kecamatan)
+      return newsProvinsiCode === searchProvinsiCode;
+    }
+
+    // When user clicks KABUPATEN → show kabupaten + all kecamatan in that kabupaten (NOT provinsi)
+    if (searchAdminLevel === 'kabupaten' && searchKabupatenCode) {
+      // Match kabupaten or kecamatan in the same kabupaten
+      // BUT exclude provinsi-level news (too general)
+      if (newsAdminLevel === 'provinsi') {
+        return false; // Don't show provinsi news when kabupaten is selected
       }
 
-      const newsProvinsiCode = normalizeCode(news.locationCode);
-      if (newsProvinsiCode && newsProvinsiCode === normalizedSearchCode) {
-        return true;
-      }
+      // Match if news kabupaten code equals search kabupaten code
+      // This will include both kabupaten news (12.03) and kecamatan news (12.03.29)
+      return newsKabupatenCode === searchKabupatenCode;
     }
 
     return false;
@@ -451,6 +527,7 @@ export const filterNewsByLocation = (allNews, locationName, locationCode = null)
 
 /**
  * Filter reports by location/region
+ * 🔥 UPDATED: Support hierarchical matching using BPS codes (same logic as filterNewsByLocation)
  */
 export const filterReportsByLocation = (allReports, regionData = null) => {
   if (!allReports || !Array.isArray(allReports)) return [];
@@ -465,28 +542,105 @@ export const filterReportsByLocation = (allReports, regionData = null) => {
       .trim();
   };
 
-  const namaProvinsi = normalize(regionData.namaProvinsi || '');
-  const namaKabupaten = normalize(regionData.namaKabupaten || '');
-  const namaKecamatan = normalize(regionData.namaKecamatan || '');
+  // Helper: normalize BPS code (remove dots)
+  const normalizeCode = (code) => {
+    if (!code) return null;
+    return String(code).replace(/\./g, '').replace(/^0+$/, '00');
+  };
+
+  // Helper: extract provinsi code from BPS code
+  const extractProvinsiCode = (bpsCode) => {
+    if (!bpsCode) return null;
+    const normalized = normalizeCode(bpsCode);
+    return normalized.substring(0, 2);
+  };
+
+  // Helper: extract kabupaten code from BPS code (remove dots)
+  const extractKabupatenCode = (bpsCode) => {
+    if (!bpsCode) return null;
+    const normalized = normalizeCode(bpsCode);
+    if (normalized.length >= 4) {
+      return normalized.substring(0, 4);
+    }
+    return normalized;
+  };
+
+  // Helper: get admin level from BPS code
+  const getAdminLevel = (bpsCode) => {
+    if (!bpsCode) return null;
+    const normalized = normalizeCode(bpsCode);
+    const length = normalized.length;
+    if (length >= 6) return 'kecamatan';
+    if (length >= 4) return 'kabupaten';
+    return 'provinsi';
+  };
+
+  // Get search parameters
+  const searchLocationName = regionData.namaKabupaten || regionData.namaProvinsi || '';
+  const searchLocationCode = regionData.kodeKabupaten || regionData.kodeProvinsi || '';
+  const searchAdminLevel = regionData.adminLevel || null;
+
+  const normalizedSearchLocation = normalize(searchLocationName);
+  const searchProvinsiCode = searchLocationCode ? extractProvinsiCode(searchLocationCode) : null;
+  const searchKabupatenCode = searchLocationCode ? extractKabupatenCode(searchLocationCode) : null;
 
   return allReports.filter(report => {
+    // Get report location info
     const locationText = normalize(report['Location Text'] || report.locationText || report.locationName || '');
-    const locationsLinked = report.Locations || report.locations || '';
-    const locName = normalize(report['Loc Name (from Locations)'] || '');
+    const locName = normalize(report['Loc Name (from Locations)'] || report.kabupatenName || '');
+    const reportBpsCode = report.bpsCode || report['BPS Code'] || '';
 
-    if (!locationText && !locationsLinked && !locName) {
+    if (!locationText && !locName && !reportBpsCode) {
       return false;
     }
 
-    const combinedLocation = `${locationText} ${locationsLinked} ${locName}`.toLowerCase();
+    // Match by name - but validate hierarchy to avoid false positives
+    const reportLocation = locName || locationText;
+    const nameMatch = reportLocation === normalizedSearchLocation ||
+      reportLocation.includes(normalizedSearchLocation) ||
+      normalizedSearchLocation.includes(reportLocation);
 
-    // Match by admin level
-    if (regionData.adminLevel === 'provinsi' && namaProvinsi) {
-      return combinedLocation.includes(namaProvinsi) || namaProvinsi.includes(locationText);
-    } else if (regionData.adminLevel === 'kabupaten' && namaKabupaten) {
-      return combinedLocation.includes(namaKabupaten) || namaKabupaten.includes(locationText);
-    } else if (regionData.adminLevel === 'kecamatan' && namaKecamatan) {
-      return combinedLocation.includes(namaKecamatan) || namaKecamatan.includes(locationText);
+    if (nameMatch) {
+      // If we have BPS codes, validate hierarchy
+      if (searchLocationCode && reportBpsCode) {
+        const reportAdminLevel = getAdminLevel(reportBpsCode);
+        const reportProvinsiCode = extractProvinsiCode(reportBpsCode);
+
+        // When kabupaten is selected, reject provinsi-level reports matched by name
+        if (searchAdminLevel === 'kabupaten' && reportAdminLevel === 'provinsi') {
+          // Check if this is the parent provinsi - SKIP it
+          if (reportProvinsiCode === searchProvinsiCode) {
+            return false;
+          }
+        }
+        return true;
+      } else {
+        // No BPS code to validate - accept name match
+        return true;
+      }
+    }
+
+    // Match by BPS code hierarchy
+    if (!reportBpsCode) return false;
+
+    const reportAdminLevel = getAdminLevel(reportBpsCode);
+    const reportProvinsiCode = extractProvinsiCode(reportBpsCode);
+    const reportKabupatenCode = extractKabupatenCode(reportBpsCode);
+
+    // 🔥 HIERARCHICAL MATCHING
+    // When PROVINSI selected → show provinsi + all kabupaten + all kecamatan in that provinsi
+    if (searchAdminLevel === 'provinsi' && searchProvinsiCode) {
+      return reportProvinsiCode === searchProvinsiCode;
+    }
+
+    // When KABUPATEN selected → show kabupaten + all kecamatan in that kabupaten (NOT provinsi)
+    if (searchAdminLevel === 'kabupaten' && searchKabupatenCode) {
+      // Exclude provinsi-level reports
+      if (reportAdminLevel === 'provinsi') {
+        return false;
+      }
+      // Match kabupaten and kecamatan in that kabupaten
+      return reportKabupatenCode === searchKabupatenCode;
     }
 
     return false;
@@ -502,7 +656,8 @@ export const calculateStatistics = (locations) => {
       totalKorbanMeninggal: 0,
       totalKorbanHilang: 0,
       totalKorbanLukaSakit: 0,
-      totalPengungsi: 0,
+      totalMenderita: 0,
+      totalMengungsi: 0,
       totalKorban: 0,
       totalRumahRusakBerat: 0,
       totalRumahRusakSedang: 0,
@@ -523,7 +678,8 @@ export const calculateStatistics = (locations) => {
     totalKorbanMeninggal: 0,
     totalKorbanHilang: 0,
     totalKorbanLukaSakit: 0,
-    totalPengungsi: 0,
+    totalMenderita: 0,
+    totalMengungsi: 0,
     totalRumahRusakBerat: 0,
     totalRumahRusakSedang: 0,
     totalRumahRusakRingan: 0,
@@ -542,7 +698,8 @@ export const calculateStatistics = (locations) => {
     stats.totalKorbanMeninggal += loc.Meninggal || 0;
     stats.totalKorbanHilang += loc.Hilang || 0;
     stats.totalKorbanLukaSakit += loc.Luka_Sakit || 0;
-    stats.totalPengungsi += loc['Final Displaced'] || loc.Menderita_Mengungsi || loc.Mengungsi || 0;
+    stats.totalMenderita += loc.Menderita || 0;
+    stats.totalMengungsi += loc.Mengungsi || 0;
 
     stats.totalRumahRusakBerat += loc.Rumah_Rusak_Berat || 0;
     stats.totalRumahRusakSedang += loc.Rumah_Rusak_Sedang || 0;
